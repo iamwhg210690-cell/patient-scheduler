@@ -1,33 +1,58 @@
+:root{
+  --blue-600: #2563eb;
+  --blue-500: #3b82f6;
+  --blue-400: #60a5fa;
+  --muted: #6b7280;
+  --bg: #ffffff;
+  --card-shadow: 0 4px 12px rgba(37,99,235,0.08);
+  --row-height: 48px;
+}
+
 .wc-container {
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-  border: 1px solid #e6e6e6;
-  overflow: auto;
+  font-family: "Noto Sans TC", Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  color: #0f172a;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
   max-width: 100%;
+}
+
+.wc-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--blue-600);
+  margin-bottom: 8px;
 }
 
 .wc-header {
   display: grid;
-  grid-template-columns: 80px repeat(7, 1fr);
-  background: #fafafa;
-  border-bottom: 1px solid #e6e6e6;
+  grid-template-columns: 90px repeat(6, 1fr);
+  background: #fbfdff;
+  border-bottom: 1px solid #eef2ff;
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 3;
+  padding-bottom: 6px;
 }
 
 .wc-time-col {
   padding: 8px;
-  border-right: 1px solid #eee;
-  min-width: 80px;
+  border-right: 1px solid #f1f5f9;
+  min-width: 90px;
   box-sizing: border-box;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .wc-day-col-header {
   padding: 10px;
   text-align: center;
-  border-right: 1px solid #eee;
+  border-right: 1px solid #f1f5f9;
   font-weight: 600;
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  color: var(--blue-600);
+  font-size: 14px;
 }
 
 .wc-grid {
@@ -36,33 +61,43 @@
 
 .wc-row {
   display: grid;
-  grid-template-columns: 80px repeat(7, 1fr);
-  min-height: 48px;
-  border-bottom: 1px dashed #f0f0f0;
+  grid-template-columns: 90px repeat(6, 1fr);
+  min-height: var(--row-height);
+  border-bottom: 1px dashed #f3f6fb;
 }
 
 .wc-time-label {
-  font-size: 12px;
-  color: #666;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 8px;
 }
 
 .wc-cell {
   padding: 6px;
-  border-right: 1px solid #f5f5f5;
-  min-height: 48px;
+  border-right: 1px solid #fbfdff;
+  min-height: var(--row-height);
   position: relative;
   background: #fff;
 }
 
+.wc-cell-covered {
+  background: #fbfdff;
+  opacity: 0.95;
+}
+
 .wc-appointment {
-  background: linear-gradient(180deg, #4f46e5, #6366f1);
+  background: linear-gradient(180deg, var(--blue-600), var(--blue-500));
   color: white;
-  padding: 6px 8px;
-  border-radius: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
   margin-bottom: 6px;
   cursor: grab;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  box-shadow: var(--card-shadow);
   font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .wc-appointment:active {
@@ -70,10 +105,89 @@
 }
 
 .wc-appt-title {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .wc-appt-meta {
-  font-size: 11px;
-  opacity: 0.9;
+  font-size: 12px;
+  opacity: 0.95;
+  margin-top: 4px;
+}
+
+/* Modal */
+.wc-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2,6,23,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+}
+
+.wc-modal {
+  background: white;
+  border-radius: 10px;
+  padding: 18px;
+  width: 360px;
+  box-shadow: 0 10px 30px rgba(2,6,23,0.2);
+}
+
+.wc-modal h3 {
+  margin: 0 0 12px 0;
+  color: var(--blue-600);
+  font-size: 16px;
+}
+
+.wc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wc-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wc-form-row label {
+  font-size: 13px;
+  color: #374151;
+}
+
+.wc-form-row input,
+.wc-form-row select {
+  padding: 8px;
+  border: 1px solid #e6eefc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.wc-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.wc-btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  border: none;
+}
+
+.wc-btn-primary {
+  background: var(--blue-600);
+  color: white;
+}
+
+.wc-btn-secondary {
+  background: #f3f4f6;
+  color: #111827;
 }
