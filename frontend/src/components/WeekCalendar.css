@@ -1,193 +1,146 @@
 :root{
-  --blue-600: #2563eb;
-  --blue-500: #3b82f6;
-  --blue-400: #60a5fa;
-  --muted: #6b7280;
-  --bg: #ffffff;
-  --card-shadow: 0 4px 12px rgba(37,99,235,0.08);
   --row-height: 48px;
+  --time-col-width: 100px;
+  --grid-line-color: #000000;
+  --grid-line-thick: 2px;
+  --warm-outer: #f6efe0;
+  --container-bg: #fbf6ee;
+  --cell-bg: #f0e6d8;
+  --cell-bg-odd: #eedfcf;
+  --accent: #b45309;
+  --appt-blue-1: #2563eb;
+  --appt-blue-2: #3b82f6;
+  --text-dark: #2b2b2b;
+  box-sizing: border-box;
 }
 
+/* global */
+*,
+*::before,
+*::after { box-sizing: inherit; }
+html, body { box-sizing: border-box; margin: 0; padding: 0; background: var(--warm-outer); }
+
+/* outer */
+.wc-outer { padding: 18px; }
 .wc-container {
-  font-family: "Noto Sans TC", Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-  color: #0f172a;
-  background: var(--bg);
-  border-radius: 8px;
+  background: var(--container-bg);
+  color: var(--text-dark);
+  border-radius: 10px;
   padding: 12px;
-  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
   max-width: 100%;
 }
+.wc-title { font-size: 20px; font-weight: 800; color: #92400e; margin-bottom: 10px; }
 
-.wc-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--blue-600);
-  margin-bottom: 8px;
-}
+/* scroll wrapper */
+.wc-scroll-wrap { max-height: 64vh; overflow: auto; position: relative; border-radius: 6px; background: transparent; }
 
+/* header */
 .wc-header {
   display: grid;
-  grid-template-columns: 90px repeat(6, 1fr);
-  background: #fbfdff;
-  border-bottom: 1px solid #eef2ff;
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  padding-bottom: 6px;
+  grid-template-columns: var(--time-col-width) repeat(5, 1fr);
+  background: linear-gradient(180deg,#fff8ef,#fbf6ee);
+  border-bottom: var(--grid-line-thick) solid var(--grid-line-color);
+  position: sticky; top: 0; z-index: 1000; padding: 0; align-items: center;
 }
-
-.wc-time-col {
-  padding: 8px;
-  border-right: 1px solid #f1f5f9;
-  min-width: 90px;
-  box-sizing: border-box;
-  font-size: 13px;
-  color: var(--muted);
+.wc-time-col, .wc-day-col-header {
+  box-sizing: border-box; padding: 10px; display: flex; align-items: center; justify-content: center;
+  border-right: var(--grid-line-thick) solid var(--grid-line-color); min-height: calc(var(--row-height) + 12px);
 }
+.wc-time-col { min-width: var(--time-col-width); font-size: 13px; color: #6b4a2a; }
+.wc-day-col-header { font-weight: 700; color: #3b2f1b; font-size: 14px; }
 
-.wc-day-col-header {
-  padding: 10px;
-  text-align: center;
-  border-right: 1px solid #f1f5f9;
-  font-weight: 600;
-  background: linear-gradient(180deg, #ffffff, #f8fbff);
-  color: var(--blue-600);
-  font-size: 14px;
-}
-
+/* grid */
 .wc-grid {
-  display: block;
-}
-
-.wc-row {
   display: grid;
-  grid-template-columns: 90px repeat(6, 1fr);
-  min-height: var(--row-height);
-  border-bottom: 1px dashed #f3f6fb;
+  grid-template-columns: var(--time-col-width) repeat(5, 1fr);
+  grid-auto-rows: var(--row-height);
+  position: relative;
+  overflow: visible;
 }
 
-.wc-time-label {
-  font-size: 13px;
-  color: var(--muted);
-  padding: 8px;
+/* time column */
+.wc-time-cell {
+  border-bottom: var(--grid-line-thick) solid var(--grid-line-color);
+  border-right: var(--grid-line-thick) solid var(--grid-line-color);
+  display: flex; align-items: center; justify-content: center; background: transparent;
 }
+.wc-time-label { font-size: 13px; color: #6b4a2a; }
 
+/* cells */
 .wc-cell {
-  padding: 6px;
-  border-right: 1px solid #fbfdff;
+  padding: 0;
+  border-right: var(--grid-line-thick) solid var(--grid-line-color);
+  border-bottom: var(--grid-line-thick) solid var(--grid-line-color);
   min-height: var(--row-height);
   position: relative;
-  background: #fff;
+  background: var(--cell-bg);
+  overflow: visible;
+  z-index: 1; /* keep cells under overlay */
+}
+.wc-cell-inner { height: var(--row-height); padding: 6px; box-sizing: border-box; }
+.wc-row:nth-child(odd) .wc-cell { background: var(--cell-bg-odd); }
+
+/* overlay per day container that spans all rows */
+.wc-overlay-day {
+  position: relative;
+  grid-row: 1 / -1;
+  pointer-events: none; /* allow clicks to pass through except on appointment elements */
+  z-index: 50; /* ensure overlay above cells */
 }
 
-.wc-cell-covered {
-  background: #fbfdff;
-  opacity: 0.95;
-}
-
-.wc-appointment {
-  background: linear-gradient(180deg, var(--blue-600), var(--blue-500));
-  color: white;
-  padding: 8px 10px;
-  border-radius: 8px;
-  margin-bottom: 6px;
-  cursor: grab;
-  box-shadow: var(--card-shadow);
+/* appointment rendered in overlay */
+.wc-appointment-overlay {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--appt-blue-1), var(--appt-blue-2));
+  color: #fff;
+  font-weight: 800;
   font-size: 13px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
   overflow: hidden;
-}
-
-.wc-appointment:active {
-  cursor: grabbing;
-}
-
-.wc-appt-title {
-  font-weight: 700;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.wc-appt-meta {
-  font-size: 12px;
-  opacity: 0.95;
-  margin-top: 4px;
-}
-
-/* Modal */
-.wc-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(2,6,23,0.45);
+  pointer-events: auto;
+  z-index: 60;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 40;
 }
 
-.wc-modal {
-  background: white;
-  border-radius: 10px;
-  padding: 18px;
-  width: 360px;
-  box-shadow: 0 10px 30px rgba(2,6,23,0.2);
-}
-
-.wc-modal h3 {
-  margin: 0 0 12px 0;
-  color: var(--blue-600);
-  font-size: 16px;
-}
-
-.wc-form {
+/* +N indicator style */
+.wc-appointment-overlay.plus-indicator {
+  background: rgba(0,0,0,0.12);
+  color: #fff;
+  font-weight: 900;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  justify-content: center;
 }
 
-.wc-form-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+/* small text inside appointment */
+.wc-appt-title { font-weight: 800; font-size: 14px; line-height: 1; }
+.wc-appt-meta { display: none; }
 
-.wc-form-row label {
-  font-size: 13px;
-  color: #374151;
-}
+/* modal & form */
+.wc-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; z-index:1200; }
+.wc-modal { background: #fff8ef; color: var(--text-dark); border-radius:10px; padding:18px; width:420px; box-shadow:0 12px 36px rgba(0,0,0,0.12); }
+.wc-modal h3 { margin:0 0 12px 0; color:#92400e; font-size:16px; }
+.wc-form { display:flex; flex-direction:column; gap:10px; }
+.wc-form-row { display:flex; flex-direction:column; gap:6px; }
+.wc-form-row label { font-size:13px; color:#6b4a2a; }
+.wc-form-row input, .wc-form-row select { padding:8px; border:1px solid #d6c6b0; border-radius:8px; background:#fffaf5; color:var(--text-dark); }
+.wc-inline { display:flex; gap:8px; align-items:center; }
+.wc-form-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
+.wc-btn { padding:8px 12px; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; border:none; }
+.wc-btn-primary { background:var(--accent); color:white; }
+.wc-btn-secondary { background:#fff6ec; color:var(--text-dark); border:1px solid #e6d6bf; }
+.wc-btn-danger { background:#b91c1c; color:white; }
+.wc-error { color:#b91c1c; font-size:13px; padding:6px 8px; background:rgba(185,28,28,0.06); border-radius:6px; }
 
-.wc-form-row input,
-.wc-form-row select {
-  padding: 8px;
-  border: 1px solid #e6eefc;
-  border-radius: 6px;
-  font-size: 14px;
-}
-
-.wc-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 6px;
-}
-
-.wc-btn {
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  border: none;
-}
-
-.wc-btn-primary {
-  background: var(--blue-600);
-  color: white;
-}
-
-.wc-btn-secondary {
-  background: #f3f4f6;
-  color: #111827;
+/* responsive */
+@media (max-width: 900px) {
+  :root { --row-height: 44px; --time-col-width: 80px; }
+  .wc-header, .wc-grid { grid-template-columns: var(--time-col-width) repeat(5, 1fr); }
+  .wc-modal { width: 92%; }
 }
