@@ -1,5 +1,5 @@
-:root{
-  --row-height: 48px;
+:root {
+  --row-height: 72px; /* 調高行高以適應垂直排列 */
   --time-col-width: 100px;
   --grid-line-color: #000000;
   --grid-line-thick: 2px;
@@ -8,8 +8,6 @@
   --cell-bg: #f0e6d8;
   --cell-bg-odd: #eedfcf;
   --accent: #b45309;
-  --appt-blue-1: #2563eb;
-  --appt-blue-2: #3b82f6;
   --text-dark: #2b2b2b;
   box-sizing: border-box;
 }
@@ -17,38 +15,73 @@
 /* global */
 *,
 *::before,
-*::after { box-sizing: inherit; }
-html, body { box-sizing: border-box; margin: 0; padding: 0; background: var(--warm-outer); }
+*::after {
+  box-sizing: inherit;
+}
+html,
+body {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  background: var(--warm-outer);
+}
 
 /* outer */
-.wc-outer { padding: 18px; }
+.wc-outer {
+  padding: 18px;
+}
 .wc-container {
   background: var(--container-bg);
   color: var(--text-dark);
   border-radius: 10px;
   padding: 12px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
   max-width: 100%;
 }
-.wc-title { font-size: 20px; font-weight: 800; color: #92400e; margin-bottom: 10px; }
+.wc-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #92400e;
+  margin-bottom: 10px;
+}
 
 /* scroll wrapper */
-.wc-scroll-wrap { max-height: 64vh; overflow: auto; position: relative; border-radius: 6px; background: transparent; }
+.wc-scroll-wrap {
+  max-height: 64vh;
+  overflow: auto;
+  position: relative;
+  border-radius: 6px;
+  background: transparent;
+}
 
 /* header */
 .wc-header {
   display: grid;
   grid-template-columns: var(--time-col-width) repeat(5, 1fr);
-  background: linear-gradient(180deg,#fff8ef,#fbf6ee);
+  background: linear-gradient(180deg, #fff8ef, #fbf6ee);
   border-bottom: var(--grid-line-thick) solid var(--grid-line-color);
-  position: sticky; top: 0; z-index: 1000; padding: 0; align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  padding: 0;
+  align-items: center;
 }
-.wc-time-col, .wc-day-col-header {
-  box-sizing: border-box; padding: 10px; display: flex; align-items: center; justify-content: center;
-  border-right: var(--grid-line-thick) solid var(--grid-line-color); min-height: calc(var(--row-height) + 12px);
+.wc-time-col,
+.wc-day-col-header {
+  box-sizing: border-box;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: var(--grid-line-thick) solid var(--grid-line-color);
+  min-height: 52px;
 }
-.wc-time-col { min-width: var(--time-col-width); font-size: 13px; color: #6b4a2a; }
-.wc-day-col-header { font-weight: 700; color: #3b2f1b; font-size: 14px; }
+.wc-time-col {
+  min-width: var(--time-col-width);
+  font-size: 13px;
+  color: #6b4a2a;
+}
+.wc-day-col-header { font-weight: 700; color: #3b2f1b; font-size: 16px; }
 
 /* grid */
 .wc-grid {
@@ -63,9 +96,12 @@ html, body { box-sizing: border-box; margin: 0; padding: 0; background: var(--wa
 .wc-time-cell {
   border-bottom: var(--grid-line-thick) solid var(--grid-line-color);
   border-right: var(--grid-line-thick) solid var(--grid-line-color);
-  display: flex; align-items: center; justify-content: center; background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
 }
-.wc-time-label { font-size: 13px; color: #6b4a2a; }
+.wc-time-label { font-size: 14px; color: #6b4a2a; }
 
 /* cells */
 .wc-cell {
@@ -75,83 +111,82 @@ html, body { box-sizing: border-box; margin: 0; padding: 0; background: var(--wa
   min-height: var(--row-height);
   position: relative;
   background: var(--cell-bg);
-  overflow: visible;
-  z-index: 1; /* keep cells under overlay */
-}
-.wc-cell-inner { height: var(--row-height); padding: 6px; box-sizing: border-box; }
-.wc-row:nth-child(odd) .wc-cell { background: var(--cell-bg-odd); }
-
-/* overlay per day container that spans all rows */
-.wc-overlay-day {
-  position: relative;
-  grid-row: 1 / -1;
-  pointer-events: none; /* allow clicks to pass through except on appointment elements */
-  z-index: 50; /* ensure overlay above cells */
-}
-
-/* appointment rendered in overlay */
-.wc-appointment-overlay {
-  position: absolute;
-  box-sizing: border-box;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: linear-gradient(180deg, var(--appt-blue-1), var(--appt-blue-2));
-  color: #fff;
-  font-weight: 800;
-  font-size: 13px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
   overflow: hidden;
-  pointer-events: auto;
-  z-index: 60;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  z-index: 1;
 }
 
-/* +N indicator style */
-.wc-appointment-overlay.plus-indicator {
-  background: rgba(0,0,0,0.12);
-  color: #fff;
-  font-weight: 900;
+/* Vertical List Layout inside Cells */
+.wc-cell-inner.vertical-layout {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
-/* small text inside appointment */
-.wc-appt-title { font-weight: 800; font-size: 14px; line-height: 1; }
-.wc-appt-meta { display: none; }
+/* Custom Scrollbar for mini vertical layouts */
+.wc-cell-inner.vertical-layout::-webkit-scrollbar {
+  width: 3px;
+}
+.wc-cell-inner.vertical-layout::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+}
 
-/* modal & form */
-.wc-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; z-index:1200; }
-.wc-modal { background: #fff8ef; color: var(--text-dark); border-radius:10px; padding:18px; width:420px; box-shadow:0 12px 36px rgba(0,0,0,0.12); }
-.wc-modal h3 { margin:0 0 12px 0; color:#92400e; font-size:16px; }
-.wc-form { display:flex; flex-direction:column; gap:10px; }
-.wc-form-row { display:flex; flex-direction:column; gap:6px; }
-.wc-form-row label { font-size:13px; color:#6b4a2a; }
-.wc-form-row input, .wc-form-row select { padding:8px; border:1px solid #d6c6b0; border-radius:8px; background:#fffaf5; color:var(--text-dark); }
-.wc-inline { display:flex; gap:8px; align-items:center; }
-.wc-form-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
-.wc-btn { padding:8px 12px; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; border:none; }
-.wc-btn-primary { background:var(--accent); color:white; }
-.wc-btn-secondary { background:#fff6ec; color:var(--text-dark); border:1px solid #e6d6bf; }
-.wc-btn-danger { background:#b91c1c; color:white; }
-.wc-error { color:#b91c1c; font-size:13px; padding:6px 8px; background:rgba(185,28,28,0.06); border-radius:6px; }
+/* Patient Mini Card styles */
+.wc-appt-card-mini {
+  font-size: 13px; /* 調大字體 */
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: white;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 14px;
+  line-height: 1;
+  opacity: 0.8; /* 20% 透明度 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transition: opacity 0.2s ease;
+}
+.wc-appt-card-mini:hover {
+  opacity: 0.9;
+}
+
+/* Patient Type Color coding */
+.wc-appt-card-mini.outpatient {
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  border-left: 3px solid #60a5fa;
+}
+.wc-appt-card-mini.inpatient {
+  background: linear-gradient(90deg, #10b981, #059669);
+  border-left: 3px solid #34d399;
+}
+
+.appt-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+}
+.appt-card-time {
+  font-size: 11px; /* 調大字體 */
+  opacity: 0.85;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
 
 /* responsive */
 @media (max-width: 900px) {
-  :root { --row-height: 44px; --time-col-width: 80px; }
-  .wc-header, .wc-grid { grid-template-columns: var(--time-col-width) repeat(5, 1fr); }
-  .wc-modal { width: 92%; }
-}
-
-/* Patient type gradients */
-.wc-appointment-overlay.outpatient {
-  background: linear-gradient(180deg, #3b82f6, #2563eb);
-  border-left: 4px solid #60a5fa;
-}
-
-.wc-appointment-overlay.inpatient {
-  background: linear-gradient(180deg, #10b981, #059669);
-  border-left: 4px solid #34d399;
+  :root {
+    --row-height: 64px;
+    --time-col-width: 80px;
+  }
+  .wc-header,
+  .wc-grid {
+    grid-template-columns: var(--time-col-width) repeat(5, 1fr);
+  }
 }
