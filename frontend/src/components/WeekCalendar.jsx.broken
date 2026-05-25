@@ -66,15 +66,6 @@ export default function WeekCalendar() {
     }, {});
   });
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [modalDay, setModalDay] = useState(0);
-  const [modalSlotIndex, setModalSlotIndex] = useState(0);
-  const [formPatient, setFormPatient] = useState("");
-  const [formDuration, setFormDuration] = useState(30);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [draggingId, setDraggingId] = useState(null);
-
   useEffect(() => {
     localStorage.setItem("ps_appointments_final_v3", JSON.stringify(appointments));
   }, [appointments]);

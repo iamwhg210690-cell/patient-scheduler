@@ -1,23 +1,20 @@
 // frontend/src/App.jsx
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import api, { setAuthToken } from './api';
 import WeekCalendar from './WeekCalendar';
 
 export default function App() {
   const [therapists, setTherapists] = useState([]);
   const [selectedTherapistId, setSelectedTherapistId] = useState(null);
-  const [token, setToken] = useState('');
-
-  useEffect(() => {
+  const [token, setToken] = useState(() => {
     const saved = localStorage.getItem('ps_token');
     if (saved) {
-      setToken(saved);
       setAuthToken(saved);
     }
-    fetchTherapists();
-  }, []);
+    return saved || '';
+  });
 
-  async function fetchTherapists() {
+  const fetchTherapists = useCallback(async () => {
     try {
       const res = await api.get('/api/therapists');
       setTherapists(res.data || []);
@@ -28,7 +25,16 @@ export default function App() {
       console.error('fetchTherapists', err);
       alert('無法取得治療師清單，請確認後端是否啟動');
     }
-  }
+  }, [selectedTherapistId]);
+
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    if (!initialized.current) {
+      initialized.current = true;
+      fetchTherapists();
+    }
+  }, [fetchTherapists]);
 
   async function handleLoginDemo() {
     try {
@@ -48,7 +54,7 @@ export default function App() {
   }
 
   function handleTherapistChange(e) {
-    setSelectedTherapistId(Number(e.target.value));
+    setSelectedTherapistId(e.target.value);
   }
 
   return (
