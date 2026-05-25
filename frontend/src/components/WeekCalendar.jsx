@@ -1,19 +1,12 @@
-import { useMemo, useState, useEffect } from "react";
-
+import { useMemo, useState, useEffect, useCallback } from "react";
+import api from "../api";
 import "./WeekCalendar.css";
 
-import sampleAppointments from "./sampleAppointments";
-
 const DAYS = ["週一", "週二", "週三", "週四", "週五"];
-
 const SLOT_MIN = 30;
-
 const MORNING_START = 8;
-
 const MORNING_END = 11;
-
 const AFTERNOON_START = 13;
-
 const AFTERNOON_END = 16;
 
 // 最大可見欄位數（含 +N 指示器欄位）
@@ -34,8 +27,7 @@ function generateSlots() {
   // push MORNING_END (11:00)
   slots.push({ hour: MORNING_END, minute: 0 });
 
-  // === 新增：插入 12:00 的欄位 ===
-  // 這裡把 12:00 明確加入 slots，使時間列包含 12:00
+  // === 插入 12:00 的欄位 ===
   slots.push({ hour: 12, minute: 0 });
 
   // afternoon: 13:00 ~ 15:30 (by 30min) up to AFTERNOON_END
@@ -48,23 +40,11 @@ function generateSlots() {
   return slots;
 }
 
-export default function WeekCalendar() {
-  const slots = useMemo(() => generateSlots(), []);
+const SLOTS = generateSlots();
 
-  const [appointments, setAppointments] = useState(() => {
-    const saved = localStorage.getItem("ps_appointments_final_v3");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (err) {
-        console.warn("Failed to parse saved appointments:", err);
-      }
-    }
-    return sampleAppointments.reduce((acc, a) => {
-      acc[a.id] = a;
-      return acc;
-    }, {});
-  });
+export default function WeekCalendar({ therapistId }) {
+  const [appointments, setAppointments] = useState({});
+  const [loading, setLoading] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -72,12 +52,43 @@ export default function WeekCalendar() {
   const [modalSlotIndex, setModalSlotIndex] = useState(0);
   const [formPatient, setFormPatient] = useState("");
   const [formDuration, setFormDuration] = useState(30);
+  const [formPatientType, setFormPatientType] = useState("outpatient");
   const [errorMsg, setErrorMsg] = useState("");
   const [draggingId, setDraggingId] = useState(null);
 
+  const fetchAppointments = useCallback(async () => {
+    if (!therapistId) return;
+    setLoading(true);
+    try {
+      const res = await api.get(`/api/appointments?therapistId=${therapistId}`);
+      const dictionary = {};
+      (res.data || []).forEach((appt) => {
+        const dayIndex = appt.day - 1; // 後端 1-5 轉元件 0-4
+        const slotIndex = SLOTS.findIndex(
+          (s) => formatTime(s.hour, s.minute) === appt.start
+        );
+        dictionary[appt.id] = {
+          id: appt.id,
+          patient: appt.patient,
+          day: dayIndex,
+          slotIndex: slotIndex !== -1 ? slotIndex : 0,
+          start: appt.start,
+          duration: appt.duration,
+          patientType: appt.patientType || "outpatient",
+        };
+      });
+      setAppointments(dictionary);
+    } catch (err) {
+      console.error("fetchAppointments error", err);
+      setAppointments({});
+    } finally {
+      setLoading(false);
+    }
+  }, [therapistId]);
+
   useEffect(() => {
-    localStorage.setItem("ps_appointments_final_v3", JSON.stringify(appointments));
-  }, [appointments]);
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   function slotSpanForDuration(duration) {
     return Math.max(1, Math.round(duration / SLOT_MIN));
@@ -107,12 +118,18 @@ export default function WeekCalendar() {
     const span = slotSpanForDuration(duration);
     for (let i = 0; i < span; i++) {
       const s = slotIndex + i;
-      if (s >= slots.length) {
+      if (s >= SLOTS.length) {
         return { ok: false, reason: "超出可排程時間範圍" };
       }
       const occ = occupancyAt(day, s, ignoreId);
       if (occ >= 4) {
-        return { ok: false, reason: `時間 ${formatTime(slots[s].hour, slots[s].minute)} 已達上限（${occ}/4）` };
+        return {
+          ok: false,
+          reason: `時間 ${formatTime(
+            SLOTS[s].hour,
+            SLOTS[s].minute
+          )} 已達上限（${occ}/4）`,
+        };
       }
     }
     return { ok: true, reason: null };
@@ -124,6 +141,7 @@ export default function WeekCalendar() {
     setModalSlotIndex(slotIndex);
     setFormPatient("");
     setFormDuration(30);
+    setFormPatientType("outpatient");
     setErrorMsg("");
     setModalOpen(true);
   }
@@ -134,11 +152,12 @@ export default function WeekCalendar() {
     setModalSlotIndex(appt.slotIndex);
     setFormPatient(appt.patient);
     setFormDuration(appt.duration);
+    setFormPatientType(appt.patientType || "outpatient");
     setErrorMsg("");
     setModalOpen(true);
   }
 
-  function submitCreateOrEdit(e) {
+  async function submitCreateOrEdit(e) {
     e.preventDefault();
     const day = modalDay;
     const slotIndex = Number(modalSlotIndex);
@@ -152,42 +171,48 @@ export default function WeekCalendar() {
       setErrorMsg(check.reason || "無法排入此時段");
       return;
     }
-    if (editing) {
-      setAppointments((prev) => {
-        const ap = {
-          ...prev[editing],
+
+    const startTimeStr = formatTime(SLOTS[slotIndex].hour, SLOTS[slotIndex].minute);
+
+    try {
+      if (editing) {
+        // 編輯：呼叫 PUT API
+        await api.put(`/api/appointments/${editing}`, {
           patient: formPatient.trim(),
+          start: startTimeStr,
           duration,
-          day,
-          slotIndex,
-          start: formatTime(slots[slotIndex].hour, slots[slotIndex].minute),
-        };
-        return { ...prev, [editing]: ap };
-      });
-    } else {
-      const id = `a${Date.now()}`;
-      const slot = slots[slotIndex];
-      const newAp = {
-        id,
-        patient: formPatient.trim(),
-        day,
-        slotIndex,
-        start: formatTime(slot.hour, slot.minute),
-        duration,
-      };
-      setAppointments((prev) => ({ ...prev, [id]: newAp }));
+          day: day + 1, // 後端 1-5
+          patientType: formPatientType,
+        });
+      } else {
+        // 新增：呼叫 POST API
+        await api.post(`/api/appointments`, {
+          therapistId,
+          patient: formPatient.trim(),
+          start: startTimeStr,
+          duration,
+          days: [day + 1], // 後端 1-5
+          patientType: formPatientType,
+        });
+      }
+      setModalOpen(false);
+      fetchAppointments();
+    } catch (err) {
+      console.error("儲存失敗", err);
+      setErrorMsg("儲存失敗：" + (err.response?.data?.error || err.message));
     }
-    setModalOpen(false);
   }
 
-  function deleteAppointment(id) {
+  async function deleteAppointment(id) {
     if (!confirm("確定要刪除此預約？")) return;
-    setAppointments((prev) => {
-      const copy = { ...prev };
-      delete copy[id];
-      return copy;
-    });
-    setModalOpen(false);
+    try {
+      await api.delete(`/api/appointments/${id}`);
+      setModalOpen(false);
+      fetchAppointments();
+    } catch (err) {
+      console.error("刪除失敗", err);
+      alert("刪除失敗：" + (err.response?.data?.error || err.message));
+    }
   }
 
   function onDragStart(e, id) {
@@ -201,7 +226,7 @@ export default function WeekCalendar() {
     e.dataTransfer.dropEffect = "move";
   }
 
-  function onDrop(e, dayIndex, slotIndex) {
+  async function onDrop(e, dayIndex, slotIndex) {
     e.preventDefault();
     const id = e.dataTransfer.getData("text/plain") || draggingId;
     if (!id) return;
@@ -213,21 +238,40 @@ export default function WeekCalendar() {
       setDraggingId(null);
       return;
     }
+
+    const newStart = formatTime(SLOTS[slotIndex].hour, SLOTS[slotIndex].minute);
+
+    // 樂觀更新前端 UI
     setAppointments((prev) => {
       const copy = { ...prev };
       copy[id] = {
         ...copy[id],
         day: dayIndex,
         slotIndex,
-        start: formatTime(slots[slotIndex].hour, slots[slotIndex].minute),
+        start: newStart,
       };
       return copy;
     });
-    setDraggingId(null);
+
+    try {
+      await api.put(`/api/appointments/${id}`, {
+        patient: ap.patient,
+        start: newStart,
+        duration: ap.duration,
+        day: dayIndex + 1, // 後端 1-5
+        patientType: ap.patientType || "outpatient",
+      });
+      fetchAppointments();
+    } catch (err) {
+      console.error("更新預約失敗", err);
+      alert("更新預約失敗，將還原狀態");
+      fetchAppointments();
+    } finally {
+      setDraggingId(null);
+    }
   }
 
-
-  // For overlay rendering: group appointments by day for easier rendering inside each day's overlay container
+  // For overlay rendering: group appointments by day
   const dayGroups = useMemo(() => {
     const dg = {};
     Object.values(appointments).forEach((a) => {
@@ -235,20 +279,19 @@ export default function WeekCalendar() {
       dg[a.day].push(a);
     });
     // sort by slotIndex for stable layout
-    Object.keys(dg).forEach((k) => dg[k].sort((x, y) => x.slotIndex - y.slotIndex || x.id.localeCompare(y.id)));
+    Object.keys(dg).forEach((k) =>
+      dg[k].sort((x, y) => x.slotIndex - y.slotIndex || x.id.localeCompare(y.id))
+    );
     return dg;
   }, [appointments]);
 
   // compute column assignment per day using interval packing (greedy)
-  // returns map { [apptId]: { colIndex, totalCols } }
   const dayColumnsMap = useMemo(() => {
     const mapByDay = {};
     Object.keys(dayGroups).forEach((dayKey) => {
       const arr = dayGroups[dayKey];
-      // sort by start slotIndex ascending, and longer spans earlier to reduce columns
       const sorted = [...arr].sort((a, b) => {
         if (a.slotIndex !== b.slotIndex) return a.slotIndex - b.slotIndex;
-        // tie-breaker: longer duration first
         return slotSpanForDuration(b.duration) - slotSpanForDuration(a.duration);
       });
       const columnsEnd = []; // columnsEnd[i] = last occupied slotIndex in column i
@@ -257,7 +300,6 @@ export default function WeekCalendar() {
         const span = slotSpanForDuration(ap.duration);
         const apStart = ap.slotIndex;
         const apEnd = apStart + span - 1;
-        // find first column where apStart > columnsEnd[col] (no overlap)
         let placed = false;
         for (let i = 0; i < columnsEnd.length; i++) {
           if (apStart > columnsEnd[i]) {
@@ -268,23 +310,20 @@ export default function WeekCalendar() {
           }
         }
         if (!placed) {
-          // create new column
           assign[ap.id] = columnsEnd.length;
           columnsEnd.push(apEnd);
         }
       });
-      const totalCols = columnsEnd.length;
-      // build final map for this day
       const final = {};
       Object.keys(assign).forEach((id) => {
-        final[id] = { colIndex: assign[id], totalCols };
+        final[id] = { colIndex: assign[id] };
       });
       mapByDay[dayKey] = final;
     });
     return mapByDay;
   }, [dayGroups]);
 
-  // NEW: compute +N indicators per day per start slot
+  // compute +N indicators per day per start slot
   const plusIndicators = useMemo(() => {
     const indicatorsByDay = {};
     Object.keys(dayGroups).forEach((dayKey) => {
@@ -327,10 +366,26 @@ export default function WeekCalendar() {
     const arr = [];
     for (let i = 0; i < span; i++) {
       const s = slotIndex + i;
-      if (s >= slots.length) break;
-      arr.push({ time: formatTime(slots[s].hour, slots[s].minute), occ: occupancyAt(day, s, ignoreId) });
+      if (s >= SLOTS.length) break;
+      arr.push({
+        time: formatTime(SLOTS[s].hour, SLOTS[s].minute),
+        occ: occupancyAt(day, s, ignoreId),
+      });
     }
     return arr;
+  }
+
+  if (!therapistId) {
+    return (
+      <div className="wc-outer">
+        <div className="wc-container" style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "400px" }}>
+          <div style={{ textAlign: "center", color: "#6b4a2a" }}>
+            <h2 style={{ fontSize: 20, marginBottom: 8 }}>請選擇一位治療師以開始查看與安排日程</h2>
+            <p style={{ fontSize: 14 }}>您可以在左側選單中切換不同的治療師</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -338,6 +393,22 @@ export default function WeekCalendar() {
       <div className="wc-container">
         <div className="wc-title">病患排程器 — 週圖</div>
         <div className="wc-scroll-wrap">
+          {loading && (
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(251, 246, 238, 0.7)",
+              zIndex: 2000,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              fontWeight: "bold",
+              color: "#b45309"
+            }}>
+              載入中...
+            </div>
+          )}
+
           <div
             className="wc-header"
             role="row"
@@ -356,18 +427,22 @@ export default function WeekCalendar() {
             aria-label="週排程"
             style={{
               gridTemplateColumns: `100px repeat(${DAYS.length}, 1fr)`,
-              gridTemplateRows: `repeat(${slots.length}, var(--row-height))`,
+              gridTemplateRows: `repeat(${SLOTS.length}, var(--row-height))`,
             }}
           >
             {/* time labels */}
-            {slots.map((slot, slotIndex) => (
-              <div key={`time-${slotIndex}`} className="wc-time-cell" style={{ gridColumn: 1, gridRow: slotIndex + 1 }}>
+            {SLOTS.map((slot, slotIndex) => (
+              <div
+                key={`time-${slotIndex}`}
+                className="wc-time-cell"
+                style={{ gridColumn: 1, gridRow: slotIndex + 1 }}
+              >
                 <div className="wc-time-label">{formatTime(slot.hour, slot.minute)}</div>
               </div>
             ))}
 
             {/* cells: keep cells for grid lines and double-click area */}
-            {slots.map((_, slotIndex) =>
+            {SLOTS.map((_, slotIndex) =>
               DAYS.map((_, dayIndex) => {
                 const key = `cell-${dayIndex}-${slotIndex}`;
                 return (
@@ -385,7 +460,7 @@ export default function WeekCalendar() {
               })
             )}
 
-            {/* OVERLAY: one container per day that spans all rows; appointments are absolutely positioned inside */}
+            {/* OVERLAY */}
             {DAYS.map((_, dayIndex) => {
               const dayKey = `${dayIndex}`;
               const dayAppts = dayGroups[dayIndex] || [];
@@ -402,7 +477,10 @@ export default function WeekCalendar() {
                 <div
                   key={`overlay-day-${dayIndex}`}
                   className="wc-overlay-day"
-                  style={{ gridColumn: dayIndex + 2, gridRow: `1 / ${slots.length + 1}` }}
+                  style={{
+                    gridColumn: dayIndex + 2,
+                    gridRow: `1 / ${SLOTS.length + 1}`,
+                  }}
                   aria-hidden
                 >
                   {dayAppts.map((ap) => {
@@ -410,7 +488,7 @@ export default function WeekCalendar() {
                     const apStart = ap.slotIndex;
                     const top = `calc(var(--row-height) * ${apStart} + 6px)`;
                     const height = `calc(var(--row-height) * ${span} - 8px)`;
-                    const mapping = colMap[ap.id] || { colIndex: 0, totalCols: 1 };
+                    const mapping = colMap[ap.id] || { colIndex: 0 };
                     const idx = mapping.colIndex;
                     if (mapping.colIndex >= visibleCols) {
                       return null;
@@ -420,11 +498,13 @@ export default function WeekCalendar() {
                     return (
                       <div
                         key={ap.id}
-                        className="wc-appointment-overlay"
+                        className={`wc-appointment-overlay ${ap.patientType || "outpatient"}`}
                         draggable
                         onDragStart={(e) => onDragStart(e, ap.id)}
                         onClick={() => openEditModal(ap)}
-                        title={`${ap.patient} • ${ap.start} • ${ap.duration} 分鐘`}
+                        title={`${ap.patient} • ${ap.start} • ${ap.duration} 分鐘 • ${
+                          ap.patientType === "inpatient" ? "住院" : "門診"
+                        }`}
                         data-appt-id={ap.id}
                         style={{
                           top,
@@ -438,13 +518,15 @@ export default function WeekCalendar() {
                     );
                   })}
 
-                  {/* render +N indicators for starts that have hidden appts */}
+                  {/* render +N indicators */}
                   {Object.keys(indicators).map((startKey) => {
                     const start = Number(startKey);
                     const info = indicators[start];
                     if (!info || info.count <= 0) return null;
                     const top = `calc(var(--row-height) * ${start} + 6px)`;
-                    const height = `calc(var(--row-height) * ${slotSpanForDuration(30)} - 8px)`;
+                    const height = `calc(var(--row-height) * ${slotSpanForDuration(
+                      30
+                    )} - 8px)`;
                     const left = `calc(${((visibleCols - 1) / visibleCols) * 100}% + 6px)`;
                     const width = `calc((100% / ${visibleCols}) - 6px)`;
                     return (
@@ -466,11 +548,9 @@ export default function WeekCalendar() {
                       </div>
                     );
                   })}
-
                 </div>
               );
             })}
-
           </div>
         </div>
 
@@ -481,17 +561,33 @@ export default function WeekCalendar() {
               <form onSubmit={submitCreateOrEdit} className="wc-form">
                 <div className="wc-form-row">
                   <label>病患姓名</label>
-                  <input value={formPatient} onChange={(e) => setFormPatient(e.target.value)} placeholder="輸入病患姓名" />
+                  <input
+                    value={formPatient}
+                    onChange={(e) => setFormPatient(e.target.value)}
+                    placeholder="輸入病患姓名"
+                  />
                 </div>
 
                 <div className="wc-form-row">
                   <label>日期與時段</label>
                   <div className="wc-inline">
-                    <select value={modalDay} onChange={(e) => setModalDay(Number(e.target.value))}>
-                      {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+                    <select
+                      value={modalDay}
+                      onChange={(e) => setModalDay(Number(e.target.value))}
+                    >
+                      {DAYS.map((d, i) => (
+                        <option key={d} value={i}>{d}</option>
+                      ))}
                     </select>
-                    <select value={modalSlotIndex} onChange={(e) => setModalSlotIndex(Number(e.target.value))}>
-                      {slots.map((s, idx) => <option key={idx} value={idx}>{formatTime(s.hour, s.minute)}</option>)}
+                    <select
+                      value={modalSlotIndex}
+                      onChange={(e) => setModalSlotIndex(Number(e.target.value))}
+                    >
+                      {SLOTS.map((s, idx) => (
+                        <option key={idx} value={idx}>
+                          {formatTime(s.hour, s.minute)}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -501,34 +597,67 @@ export default function WeekCalendar() {
 
                   <div style={{ marginTop: 6, fontSize: 13, color: "#6b4a2a" }}>
                     跨格佔用預覽：
-                    {occupancySummary(modalDay, modalSlotIndex, formDuration, editing).map((r) => (
-                      <div key={r.time} style={{ fontSize: 12 }}>{r.time}：{r.occ} / 4</div>
-                    ))}
+                    {occupancySummary(modalDay, modalSlotIndex, formDuration, editing).map(
+                      (r) => (
+                        <div key={r.time} style={{ fontSize: 12 }}>
+                          {r.time}：{r.occ} / 4
+                        </div>
+                      )
+                    )}
                   </div>
                 </div>
 
                 <div className="wc-form-row">
                   <label>時長（分鐘）</label>
-                  <select value={formDuration} onChange={(e) => setFormDuration(Number(e.target.value))}>
+                  <select
+                    value={formDuration}
+                    onChange={(e) => setFormDuration(Number(e.target.value))}
+                  >
                     <option value={30}>30</option>
                     <option value={60}>60</option>
                     <option value={90}>90</option>
                   </select>
                 </div>
 
+                <div className="wc-form-row">
+                  <label>病患類型</label>
+                  <select
+                    value={formPatientType}
+                    onChange={(e) => setFormPatientType(e.target.value)}
+                  >
+                    <option value="outpatient">門診</option>
+                    <option value="inpatient">住院</option>
+                  </select>
+                </div>
+
                 {errorMsg && <div className="wc-error">{errorMsg}</div>}
 
                 <div className="wc-form-actions">
-                  {editing && <button type="button" className="wc-btn wc-btn-danger" onClick={() => deleteAppointment(editing)}>刪除</button>}
+                  {editing && (
+                    <button
+                      type="button"
+                      className="wc-btn wc-btn-danger"
+                      onClick={() => deleteAppointment(editing)}
+                    >
+                      刪除
+                    </button>
+                  )}
                   <div style={{ flex: 1 }} />
-                  <button type="button" className="wc-btn wc-btn-secondary" onClick={() => setModalOpen(false)}>取消</button>
-                  <button type="submit" className="wc-btn wc-btn-primary">{editing ? "儲存變更" : "建立預約"}</button>
+                  <button
+                    type="button"
+                    className="wc-btn wc-btn-secondary"
+                    onClick={() => setModalOpen(false)}
+                  >
+                    取消
+                  </button>
+                  <button type="submit" className="wc-btn wc-btn-primary">
+                    {editing ? "儲存變更" : "建立預約"}
+                  </button>
                 </div>
               </form>
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

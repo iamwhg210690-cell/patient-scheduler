@@ -144,3 +144,14 @@ html, body { box-sizing: border-box; margin: 0; padding: 0; background: var(--wa
   .wc-header, .wc-grid { grid-template-columns: var(--time-col-width) repeat(5, 1fr); }
   .wc-modal { width: 92%; }
 }
+
+/* Patient type gradients */
+.wc-appointment-overlay.outpatient {
+  background: linear-gradient(180deg, #3b82f6, #2563eb);
+  border-left: 4px solid #60a5fa;
+}
+
+.wc-appointment-overlay.inpatient {
+  background: linear-gradient(180deg, #10b981, #059669);
+  border-left: 4px solid #34d399;
+}

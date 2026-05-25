@@ -1,7 +1,7 @@
 // frontend/src/App.jsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api, { setAuthToken } from './api';
-import WeekCalendar from './WeekCalendar';
+import WeekCalendar from './components/WeekCalendar';
 
 export default function App() {
   const [therapists, setTherapists] = useState([]);
