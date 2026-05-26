@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import "./WeekCalendar.css";
 
 const DAYS = ["週一", "週二", "週三", "週四", "週五"];
@@ -31,6 +31,7 @@ function generateSlots() {
 const SLOTS = generateSlots();
 
 export default function WeekCalendar({ therapistId, therapistName, appointments, loading }) {
+  const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, patient: '', freq: '', type: '' });
   // 將 appointments（陣列/物件）統一處理為陣列
   const apptList = useMemo(() => {
     if (!appointments) return [];
@@ -45,21 +46,44 @@ export default function WeekCalendar({ therapistId, therapistName, appointments,
       const startIdx = SLOTS.findIndex(
         (s) => formatTime(s.hour, s.minute) === a.start
       );
-      const span = Math.max(1, Math.round(a.duration / 30));
       return {
         ...a,
         startIdx: startIdx !== -1 ? startIdx : 0,
-        span,
+        span: 1, // 固定為 1，只顯示在開始時間那一格，取消跨格顯示
       };
     });
   }, [apptList]);
 
-  // 依 day 和 slotIndex 取得該時間格的所有預約 (最多 4 位，垂直排列)
+  const handleMouseEnter = (e, appt) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const patientName = appt.patient.trim();
+    
+    // 計算該病人在目前治療師名下的所有預約，以得到治療頻率
+    const patientAppts = apptRanges.filter(a => a.patient.trim() === patientName);
+    const uniqueDays = Array.from(new Set(patientAppts.map(a => a.day))).sort();
+    const dayNames = { 1: "週一", 2: "週二", 3: "週三", 4: "週四", 5: "週五" };
+    const freqStr = uniqueDays.map(d => dayNames[d]).join(", ");
+
+    setTooltip({
+      show: true,
+      x: rect.left + window.scrollX + rect.width / 2,
+      y: rect.top + window.scrollY,
+      patient: appt.patient,
+      freq: freqStr,
+      type: appt.patientType === 'inpatient' ? '住院' : '門診'
+    });
+  };
+
+  const handleMouseLeave = () => {
+    setTooltip({ show: false, x: 0, y: 0, patient: '', freq: '', type: '' });
+  };
+
+  // 依 day 和 slotIndex 取得該時間格的所有預約 (單格限2人)
   function getApptsInCell(dayNum, slotIdx) {
     // dayNum 為 0-4（週一至週五的索引），後端 day 為 1-5。
     return apptRanges
-      .filter((a) => a.day === dayNum + 1 && slotIdx >= a.startIdx && slotIdx < a.startIdx + a.span)
-      .slice(0, 4); // 單格最多顯示 4 個
+      .filter((a) => a.day === dayNum + 1 && slotIdx === a.startIdx)
+      .slice(0, 2); // 單格最多顯示 2 個
   }
 
   if (!therapistId) {
@@ -145,12 +169,10 @@ export default function WeekCalendar({ therapistId, therapistName, appointments,
                         <div
                           key={`${appt.id}-${slotIndex}`}
                           className={`wc-appt-card-mini ${appt.patientType || "outpatient"}`}
-                          title={`${appt.patient} • ${appt.start} • ${appt.duration}分鐘 • ${
-                            appt.patientType === "inpatient" ? "住院" : "門診"
-                          }`}
+                          onMouseEnter={(e) => handleMouseEnter(e, appt)}
+                          onMouseLeave={handleMouseLeave}
                         >
                           <span className="appt-card-name">{appt.patient}</span>
-                          <span className="appt-card-time">{appt.duration}分</span>
                         </div>
                       ))}
                     </div>
@@ -161,6 +183,24 @@ export default function WeekCalendar({ therapistId, therapistName, appointments,
           </div>
         </div>
       </div>
+      
+      {tooltip.show && (
+        <div 
+          className="wc-custom-tooltip"
+          style={{
+            position: 'absolute',
+            left: `${tooltip.x}px`,
+            top: `${tooltip.y}px`,
+            transform: 'translate(-50%, -105%)',
+            zIndex: 99999,
+            pointerEvents: 'none'
+          }}
+        >
+          <div className="tooltip-title">{tooltip.patient}</div>
+          <div className="tooltip-row"><b>治療頻率：</b>{tooltip.freq}</div>
+          <div className="tooltip-row"><b>病患類型：</b>{tooltip.type}</div>
+        </div>
+      )}
     </div>
   );
 }

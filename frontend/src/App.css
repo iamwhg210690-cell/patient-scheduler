@@ -1,15 +1,28 @@
-/* frontend/src/App.css - Application Styles */
+/* frontend/src/App.css - Redesigned Modern UI/UX Styles */
 
 :root {
-  --primary: #007AFF;
-  --primary-dark: #0051D5;
-  --bg: #ffffff;
-  --border: #e0e0e0;
-  --text: #333333;
-  --text-light: #666666;
-  --accent: #34C759;
-  --accent-bg: #f0fdf4;
-  --accent-border: #86efac;
+  --primary: #4f46e5;         /* Indigo-600 */
+  --primary-hover: #4338ca;   /* Indigo-700 */
+  --primary-bg: #f1ebd9;      /* 暖米色背景 */
+  --bg: #fffdf9;              /* 象牙白溫暖底色 */
+  --bg-main: #f4edd8;         /* 溫暖專業暖米背景 */
+  --border: #bcaea0;          /* 暖灰色格線，特別加深 */
+  --text: #0f172a;            /* Slate-900 主要文字 */
+  --text-light: #334155;      /* Slate-700 次要文字，加深對比 */
+  --text-muted: #64748b;      /* Slate-500 靜態文字 */
+  
+  --success: #10b981;         /* Emerald-500 */
+  --success-bg: #d1fae5;      /* Emerald-100 */
+  --warning: #f59e0b;         /* Amber-500 */
+  
+  --sidebar-bg: #0f172a;      /* Slate-900 深色側欄 */
+  --sidebar-text: #94a3b8;    /* 側欄文字預設 */
+  --sidebar-hover: #1e293b;   /* 側欄選項 Hover */
+  
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 * {
@@ -19,434 +32,750 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: #f9f9f9;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg-main);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
+/* 核心按鈕設計 */
 button {
   cursor: pointer;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 16px;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px; /* 由 14px 放大至 15px */
+  font-weight: 600;
   background: var(--primary);
   color: white;
-  transition: background 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 button:hover {
-  background: var(--primary-dark);
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 button:active {
-  opacity: 0.8;
+  transform: translateY(0);
+  opacity: 0.95;
 }
 
-input, select {
+/* 輸入框與選擇器設計 */
+input, select, textarea {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 12px;
-  font-size: 14px;
+  font-size: 15px; /* 由 14px 放大至 15px */
   font-family: inherit;
-  transition: border-color 0.2s;
+  color: var(--text);
+  background-color: #ffffff;
+  transition: all 0.2s ease;
 }
 
-input:focus, select:focus {
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 
-/* Main Application */
+/* App 佈局結構 */
 .app {
   display: flex;
   height: 100vh;
-  background: var(--bg);
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg-main);
 }
 
+/* 左側邊欄 (Sidebar) 美化 */
 .sidebar {
-  width: 220px;
-  padding: 16px;
-  background: #f5f5f7;
-  border-right: 1px solid var(--border);
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.05);
+  width: 250px;
+  padding: 20px 16px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
   overflow-y: auto;
+  flex-shrink: 0;
+  scrollbar-width: thin;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 2px;
 }
 
 .sidebar h2 {
   margin: 0 0 24px 0;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 20px; /* 由 18px 放大至 20px */
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.025em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
+/* 示範登入區塊 */
 .login-block {
-  margin-bottom: 24px;
-  padding: 12px;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  margin-bottom: 20px;
+  padding: 14px;
+  background: #1e293b;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  box-shadow: var(--shadow-sm);
 }
 
 .login-block button {
   width: 100%;
   margin-bottom: 8px;
+  background: #334155;
+  color: #f1f5f9;
+}
+.login-block button:hover {
+  background: #475569;
 }
 
 .token-indicator {
   text-align: center;
-  font-size: 13px;
-  color: var(--text-light);
-  padding: 8px;
-  border-radius: 4px;
-  background: #f0f0f0;
-}
-
-.therapist-select {
-  margin-bottom: 24px;
-}
-
-.therapist-select label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.therapist-select select {
-  width: 100%;
-  padding: 8px;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-}
-
-.actions button {
-  flex: 1;
-  padding: 8px;
-}
-
-/* Main Content */
-.main {
-  flex: 1;
-  padding: 32px;
-  overflow-y: auto;
-  background: #fafafa;
-}
-
-.main h3 {
-  margin-top: 0;
-  font-size: 18px;
-  margin-bottom: 20px;
-}
-
-.main h4 {
-  font-size: 16px;
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-/* Therapist Management Modal Specific Styles */
-.manage-btn {
-  width: 100%;
-  margin-top: 8px;
-  background: #4b5563; /* 灰色 */
-}
-.manage-btn:hover {
-  background: #374151;
-}
-
-.therapist-list {
-  max-height: 250px;
-  overflow-y: auto;
-  margin-bottom: 16px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px;
-  background: #fff;
-}
-.therapist-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 4px;
-  border-bottom: 1px solid #f3f4f6;
-}
-.therapist-item:last-child {
-  border-bottom: none;
-}
-.therapist-item-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-}
-.therapist-item-input {
-  padding: 4px 8px;
-  font-size: 14px;
-  width: 110px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-.therapist-item-actions {
-  display: flex;
-  gap: 6px;
-}
-.btn-mini {
-  padding: 4px 8px;
   font-size: 12px;
-  border-radius: 4px;
-}
-.btn-mini-danger {
-  background: #dc2626;
-}
-.btn-mini-danger:hover {
-  background: #b91c1c;
-}
-.btn-mini-success {
-  background: #16a34a;
-}
-.btn-mini-success:hover {
-  background: #15803d;
-}
-.btn-mini-secondary {
-  background: #e5e7eb;
-  color: #374151;
-}
-.btn-mini-secondary:hover {
-  background: #d1d5db;
-}
-.add-therapist-form {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.add-therapist-form input {
-  flex: 1;
-  padding: 6px 10px;
-  font-size: 14px;
-  border: 1px solid var(--border);
+  color: #cbd5e1;
+  padding: 6px;
   border-radius: 6px;
-}
-.add-therapist-form button {
-  padding: 6px 12px;
-  font-size: 14px;
+  background: #0f172a;
+  font-weight: 500;
 }
 
-/* Tab Navigation Menu */
+/* 分頁選單 */
 .tab-menu {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: 6px;
+  margin-bottom: 20px;
 }
+
 .tab-btn {
   width: 100%;
   text-align: left;
   background: transparent;
-  color: var(--text-light);
+  color: var(--sidebar-text);
   border: 1px solid transparent;
-  padding: 10px 12px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-.tab-btn:hover {
-  background: #eaeaea;
-  color: var(--text);
-}
-.tab-btn.active {
-  background: var(--primary);
-  color: white;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 15px; /* 由 14px 放大至 15px */
   font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.2);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-/* Patient List & Handover Layouts */
+.tab-btn:hover {
+  background: var(--sidebar-hover);
+  color: #ffffff;
+}
+
+.tab-btn.active {
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+/* 摺疊面板 (Sidebar Accordion) */
+.sidebar-collapse-section {
+  border-top: 1px solid #1e293b;
+  padding-top: 16px;
+  margin-top: auto; /* 置底 */
+}
+
+.sidebar-collapse-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--sidebar-text);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.sidebar-collapse-header:hover {
+  color: #ffffff;
+  background: var(--sidebar-hover);
+}
+
+.sidebar-collapse-arrow {
+  transition: transform 0.2s ease;
+  font-size: 10px;
+}
+.sidebar-collapse-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.sidebar-collapse-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 4px;
+}
+
+/* 頂部 Header 工具列 */
+.top-header {
+  height: 70px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.top-header-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.top-header-title {
+  font-size: 22px; /* 由 18px 放大至 22px */
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.top-header-subtitle {
+  font-size: 13px; /* 由 12px 放大至 13px */
+  color: var(--text-light);
+  margin-top: 2px;
+}
+
+.top-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Header 內下拉選單與按鈕 */
+.header-select-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f1f5f9;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.header-select-group label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+
+.header-select-group select {
+  border: none;
+  background: transparent;
+  padding: 4px 28px 4px 8px;
+  font-weight: 600;
+  font-size: 14px; /* 由 13px 放大至 14px */
+}
+.header-select-group select:focus {
+  box-shadow: none;
+}
+
+.header-btn-manage {
+  background: #64748b;
+  color: white;
+  font-size: 14px; /* 由 13px 放大至 14px */
+  padding: 6px 12px;
+}
+.header-btn-manage:hover {
+  background: #475569;
+}
+
+.header-btn-add-appt {
+  background: var(--primary);
+  font-size: 14px; /* 由 13px 放大至 14px */
+  padding: 6px 14px;
+}
+
+/* 主要內容區 */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  padding: 0; /* 讓 Calendar 擁有完整的滾動，padding 由 calendar 本身處理 */
+  overflow-y: auto;
+  background: var(--bg-main);
+}
+
+/* 篩選工具列（病人清單與交班） */
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  padding: 16px 24px;
+  margin: 24px 24px 0 24px;
+  border-radius: 12px;
+  align-items: flex-end;
+  box-shadow: var(--shadow-sm);
 }
+
 .filter-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.filter-group label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-}
-.filter-input {
-  padding: 8px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: white;
-  min-width: 150px;
-  font-size: 13px;
+  gap: 6px;
 }
 
-/* Premium Table Styles */
+.filter-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-light);
+}
+
+.filter-input {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+/* 表格包裝器 */
+.patient-table-container {
+  padding: 24px;
+}
+
 .patient-table-wrapper {
   background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
   overflow: hidden;
 }
+
 .patient-table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
 }
+
 .patient-table th {
-  background: #f1f5f9;
-  padding: 12px 16px;
-  font-weight: 600;
-  font-size: 14px;
-  color: #475569;
-  border-bottom: 1px solid #e2e8f0;
+  background: #fdfbf7;
+  padding: 14px 20px;
+  font-weight: 700;
+  font-size: 14px; /* 由 13px 放大至 14px */
+  color: var(--text-light);
+  border-bottom: 3px solid var(--border); /* 特別加粗 th 邊界 */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
+
 .patient-table td {
-  padding: 14px 16px;
-  font-size: 14px;
-  color: #334155;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 16px 20px;
+  font-size: 15px; /* 由 14px 放大至 15px */
+  color: var(--text);
+  border-bottom: 2px solid var(--border); /* 特別加深加粗一般表格格線 */
   vertical-align: middle;
 }
+
 .patient-table tr:last-child td {
   border-bottom: none;
 }
+
 .patient-table tr:hover td {
   background: #f8fafc;
 }
 
-/* Badges */
+/* 病患類型標籤 */
 .badge-mini {
-  display: inline-block;
-  padding: 2px 6px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
   font-size: 12px;
-  font-weight: 600;
-  border-radius: 4px;
+  font-weight: 700;
+  border-radius: 6px;
   text-align: center;
 }
+
 .badge-inpatient {
-  background: #d1fae5;
+  background: var(--success-bg);
   color: #065f46;
 }
+
 .badge-outpatient {
-  background: #dbeafe;
+  background: var(--primary-bg);
   color: #1e40af;
 }
 
-/* Handover Text Area */
+/* 交班備註編輯區 */
 .handover-input-container {
   display: flex;
   flex-direction: column;
   gap: 4px;
   width: 100%;
 }
+
 .handover-input-wrapper {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+
 .handover-textarea {
   flex: 1;
-  height: 80px; /* 增大高度避免初始滾動條 */
-  resize: vertical; /* 允許垂直縮放 */
-  padding: 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 13px;
+  height: 110px; /* 大幅調高以避免一開始就出現滾動條 */
+  resize: vertical;
+  padding: 10px 12px;
+  border: 2px solid var(--border); /* 加深加粗輸入框邊界 */
+  border-radius: 8px;
+  font-size: 14px; /* 由 13px 放大至 14px */
   transition: all 0.2s;
-  background: #fffdfa;
+  background: #fffdf9;
 }
+
 .handover-textarea:focus {
   outline: none;
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
-  background: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  background: #ffffff;
 }
+
 .char-counter {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
+
 .status-indicator {
   font-size: 11px;
   font-weight: bold;
 }
+
 .status-saved {
-  color: #10b981;
+  color: var(--success);
 }
 
-/* Patient Detail View */
+/* 病患詳情欄位網格 */
 .detail-grid {
   display: grid;
-  grid-template-columns: 100px 1fr;
+  grid-template-columns: 120px 1fr;
   gap: 12px 16px;
   margin-top: 16px;
   margin-bottom: 20px;
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
 }
+
 .detail-label {
-  font-weight: 600;
-  color: #64748b;
+  font-weight: 700;
+  color: var(--text-light);
   font-size: 14px;
 }
+
 .detail-value {
-  color: #1e293b;
+  color: var(--text);
   font-size: 14px;
 }
+
 .detail-handover-box {
   background: #fffbeb;
   border: 1px solid #fef3c7;
-  border-left: 4px solid #f59e0b;
-  padding: 12px;
-  border-radius: 4px;
-  font-size: 14px;
+  border-left: 4px solid var(--warning);
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 13px;
   color: #78350f;
+  line-height: 1.5;
   white-space: pre-wrap;
   margin-top: 6px;
 }
 
-/* Print UI Component Styles */
+/* 摺疊面板內按鈕 (微調) */
 .print-actions-block {
-  background: #f1f5f9;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-}
-
-.print-actions-block h4 {
-  font-size: 13px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .print-actions-block .wc-btn {
+  font-size: 13px;
+  padding: 8px;
+  width: 100%;
+}
+
+.import-export-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ie-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ie-btn {
+  font-size: 12px !important;
+  padding: 7px;
+  width: 100%;
+  border-radius: 6px;
+}
+
+.ie-btn-export-excel { background-color: #16a34a; }
+.ie-btn-export-excel:hover { background-color: #15803d; }
+.ie-btn-export-csv { background-color: #0284c7; }
+.ie-btn-export-csv:hover { background-color: #0369a1; }
+.ie-btn-import { background-color: #7c3aed; }
+.ie-btn-import:hover { background-color: #6d28d9; }
+
+/* 報告 Modal */
+.report-content {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fafc;
+  margin-top: 8px;
+  text-align: left;
+}
+
+.report-item {
+  font-size: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  line-height: 1.4;
+}
+
+.report-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.report-success {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.report-error {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+/* 新增預約表單表單網格 (雙欄) */
+.appt-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.appt-form-full {
+  grid-column: span 2;
+}
+
+.appt-form-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-light);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.appt-form-input {
+  width: 100%;
+}
+
+/* 星期核取方塊排版 */
+.days-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #f8fafc;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.days-checkbox-label {
+  font-size: 13px;
+  font-weight: 600;
   display: flex;
   align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  background: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.days-checkbox-label:hover {
+  background: #f1f5f9;
+}
+
+.days-checkbox-label input {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* 治療師維護清單 */
+.therapist-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  background: #f8fafc;
+}
+
+.therapist-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: white;
+  margin-bottom: 4px;
+  box-shadow: var(--shadow-sm);
+}
+
+.therapist-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.therapist-item-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.therapist-item-input {
+  padding: 4px 8px;
+  font-size: 13px;
+  width: 140px;
+}
+
+.therapist-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.add-therapist-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.add-therapist-form input {
+  flex: 1;
+}
+
+/* 通用 Modal 彈出視窗設計 */
+.wc-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6); /* Slate-900 60% 透明 */
+  backdrop-filter: blur(4px); /* 毛玻璃 */
+  display: flex;
   justify-content: center;
-  gap: 6px;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  align-items: center;
+  z-index: 999;
+  animation: fadeIn 0.2s ease-out;
 }
 
-.print-actions-block .wc-btn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.1);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+.wc-modal {
+  background: white;
+  padding: 24px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-xl);
+  max-width: 95%;
+  width: 500px;
+  animation: scaleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 1px solid var(--border);
 }
 
+.wc-modal h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+}
 
+.wc-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.wc-btn-secondary {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+.wc-btn-secondary:hover {
+  background-color: #e2e8f0;
+}
+
+/* 動畫效果 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}

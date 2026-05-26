@@ -1,9 +1,11 @@
 // frontend/src/App.jsx
 import { useCallback, useEffect, useRef, useState } from 'react';
+import axios from 'axios';
 import api, { setAuthToken } from './api';
 import WeekCalendar from './components/WeekCalendar';
 import PatientList from './components/PatientList';
 import PatientHandover from './components/PatientHandover';
+import { parseImportFile, parseImportText, exportToExcel, exportToCSV } from './utils/excelHelper';
 
 const SLOT_MIN = 30;
 const MORNING_START = 8;
@@ -62,6 +64,7 @@ export default function App() {
   const [printType, setPrintType] = useState("schedule"); // schedule, handover
   const [printTherapistMode, setPrintTherapistMode] = useState("current"); // current, all
   const [printTherapistId, setPrintTherapistId] = useState("");
+  const [printPatientType, setPrintPatientType] = useState("");
 
   // 新增預約表單 State (常駐 Sidebar 區)
   const [newApptPatient, setNewApptPatient] = useState("");
@@ -75,6 +78,26 @@ export default function App() {
   const [newTherapistName, setNewTherapistName] = useState("");
   const [editingTherapistId, setEditingTherapistId] = useState(null);
   const [editingTherapistName, setEditingTherapistName] = useState("");
+
+  // 匯入與匯出相關的 State 及 Ref
+  const fileInputRef = useRef(null);
+  const dbInputRef = useRef(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [importReport, setImportReport] = useState({
+    successCount: 0,
+    failedCount: 0,
+    errors: [],
+    addedTherapists: []
+  });
+
+  // UI/UX 增強狀態
+  const [apptModalOpen, setApptModalOpen] = useState(false);
+  const [toolsExpanded, setToolsExpanded] = useState(false);
+  const [gSheetsImportModalOpen, setGSheetsImportModalOpen] = useState(false);
+  const [gSheetsUrl, setGSheetsUrl] = useState('');
+  const [importTab, setImportTab] = useState('url'); // 'url' | 'text'
+  const [importTextContent, setImportTextContent] = useState('');
+  const [gSheetsImporting, setGSheetsImporting] = useState(false);
 
   const fetchTherapists = useCallback(async () => {
     try {
@@ -224,31 +247,17 @@ export default function App() {
       alert("無效的開始時間");
       return;
     }
-    const span = Math.max(1, Math.round(newApptDuration / 30));
     
-    // 檢查將佔用的每個星期及 30 分鐘 slot
+    // 檢查將佔用的每個星期（僅檢查開始時間那一格，且上限改為 2 人）
     for (const day of newApptDays) {
-      for (let i = 0; i < span; i++) {
-        const currentSlotIdx = startIdx + i;
-        if (currentSlotIdx >= SLOTS.length) {
-          alert(`時長超出治療排程時間範圍！`);
-          return;
-        }
-        
-        const targetTimeStr = formatTime(SLOTS[currentSlotIdx].hour, SLOTS[currentSlotIdx].minute);
-        
-        // 算出在此 slot 內已有的人數
-        const currentOccupancy = appointments.filter(a => {
-          if (a.day !== day) return false;
-          const aStartIdx = SLOTS.findIndex(s => formatTime(s.hour, s.minute) === a.start);
-          const aSpan = Math.max(1, Math.round(a.duration / 30));
-          return currentSlotIdx >= aStartIdx && currentSlotIdx < aStartIdx + aSpan;
-        }).length;
-        
-        if (currentOccupancy >= 4) {
-          alert(`⚠️ 預約衝突！\n負責治療師在 ${DAY_LABELS[day]} ${targetTimeStr} 的預約人數已達上限（${currentOccupancy}/4），無法新增此排程。`);
-          return; // 阻擋提交
-        }
+      // 算出在該星期的該開始時間，已有的預約人數
+      const currentOccupancy = appointments.filter(a => {
+        return a.day === day && a.start === newApptStartTime;
+      }).length;
+      
+      if (currentOccupancy >= 2) {
+        alert(`⚠️ 預約衝突！\n負責治療師在 ${DAY_LABELS[day]} ${newApptStartTime} 的預約人數已達上限（${currentOccupancy}/2），無法新增此排程。`);
+        return; // 阻擋提交
       }
     }
 
@@ -273,6 +282,7 @@ export default function App() {
       // 重新載入預約
       await fetchAppointments();
       alert("新增預約成功！");
+      setApptModalOpen(false);
     } catch (err) {
       console.error("Create appointment error", err);
       alert("新增失敗：" + (err.response?.data?.error || err.message));
@@ -453,18 +463,17 @@ export default function App() {
           
           const apptRanges = tAppts.map((a) => {
             const startIdx = SLOTS.findIndex((s) => formatTime(s.hour, s.minute) === a.start);
-            const span = Math.max(1, Math.round(a.duration / 30));
             return {
               ...a,
               startIdx: startIdx !== -1 ? startIdx : 0,
-              span,
+              span: 1,
             };
           });
 
           const getApptsInCellForPrint = (dayNum, slotIdx) => {
             return apptRanges
-              .filter((a) => a.day === dayNum + 1 && slotIdx >= a.startIdx && slotIdx < a.startIdx + a.span)
-              .slice(0, 4);
+              .filter((a) => a.day === dayNum + 1 && slotIdx === a.startIdx)
+              .slice(0, 2);
           };
 
           const morningSlots = SLOTS.slice(0, 8);
@@ -496,7 +505,7 @@ export default function App() {
                               <div class="appt-list">
                                 ${appts.map(appt => `
                                   <div class="appt-item ${appt.patientType || 'outpatient'}">
-                                    <span class="appt-name">${appt.patient} (${appt.duration}分)</span>
+                                    <span class="appt-name">${appt.patient}</span>
                                   </div>
                                 `).join('')}
                               </div>
@@ -536,7 +545,7 @@ export default function App() {
                               <div class="appt-list">
                                 ${appts.map(appt => `
                                   <div class="appt-item ${appt.patientType || 'outpatient'}">
-                                    <span class="appt-name">${appt.patient} (${appt.duration}分)</span>
+                                    <span class="appt-name">${appt.patient}</span>
                                   </div>
                                 `).join('')}
                               </div>
@@ -556,7 +565,11 @@ export default function App() {
         const dayNames = { 1: "週一", 2: "週二", 3: "週三", 4: "週四", 5: "週五" };
 
         therapistsToPrint.forEach((therapist, index) => {
-          const tAppts = printAppts.filter(a => a.therapistId === therapist.id);
+          const tAppts = printAppts.filter(a => {
+            const matchesTherapist = a.therapistId === therapist.id;
+            const matchesType = !printPatientType || a.patientType === printPatientType;
+            return matchesTherapist && matchesType;
+          });
 
           const groups = {};
           tAppts.forEach(appt => {
@@ -645,6 +658,427 @@ export default function App() {
     }
   };
 
+  const handleExport = async (format, range) => {
+    try {
+      let exportAppts = [];
+      if (range === 'all') {
+        const res = await api.get('/api/appointments');
+        exportAppts = res.data || [];
+      } else {
+        exportAppts = appointments;
+      }
+
+      if (exportAppts.length === 0) {
+        alert('沒有可匯出的排程資料');
+        return;
+      }
+
+      const fileName = range === 'all' ? '全體治療排程表' : `${selectedTherapistName}_治療排程表`;
+      
+      if (format === 'excel') {
+        exportToExcel(exportAppts, therapists, fileName);
+      } else {
+        exportToCSV(exportAppts, therapists, fileName);
+      }
+    } catch (err) {
+      console.error('Export failed', err);
+      alert('匯出失敗：' + err.message);
+    }
+  };
+
+  const handleExportDatabase = () => {
+    try {
+      const therapists = localStorage.getItem('therapists') || '[]';
+      const appointments = localStorage.getItem('appointments') || '[]';
+      
+      const backupData = {
+        version: '1.0',
+        timestamp: new Date().toISOString(),
+        therapists: JSON.parse(therapists),
+        appointments: JSON.parse(appointments)
+      };
+
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+        JSON.stringify(backupData, null, 2)
+      )}`;
+      
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', jsonString);
+      downloadAnchor.setAttribute('download', `patient_scheduler_backup_${new Date().toISOString().slice(0,10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      
+      alert('💾 系統資料庫備份成功！已下載備份 JSON 檔案。');
+    } catch (err) {
+      console.error('Database export failed', err);
+      alert('備份失敗：' + err.message);
+    }
+  };
+
+  const handleImportDatabase = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const backupData = JSON.parse(event.target.result);
+        
+        if (!backupData || !Array.isArray(backupData.therapists) || !Array.isArray(backupData.appointments)) {
+          alert('❌ 無效的備份檔案格式，還原失敗！');
+          return;
+        }
+
+        const confirmRestore = confirm(
+          `⚠️ 警告！此操作將會覆蓋您目前電腦中的所有排程與治療師資料！\n` +
+          `備份檔時間：${new Date(backupData.timestamp).toLocaleString()}\n` +
+          `包含：${backupData.therapists.length} 位治療師、${backupData.appointments.length} 筆排程預約。\n\n` +
+          `確定要繼續還原嗎？`
+        );
+
+        if (!confirmRestore) return;
+
+        localStorage.setItem('therapists', JSON.stringify(backupData.therapists));
+        localStorage.setItem('appointments', JSON.stringify(backupData.appointments));
+
+        alert('📂 資料庫還原成功！網頁即將自動重新整理以套用資料。');
+        window.location.reload();
+      } catch (err) {
+        console.error('Database import failed', err);
+        alert('解析還原檔案失敗：' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    e.target.value = '';
+
+    try {
+      const parsed = await parseImportFile(file);
+      
+      if (parsed.successData.length === 0 && parsed.errorRows.length === 1 && parsed.errorRows[0].rowNum === 1) {
+        alert(parsed.errorRows[0].error);
+        return;
+      }
+
+      await processImport(parsed.successData, parsed.errorRows);
+    } catch (err) {
+      console.error('Import failed', err);
+      alert('解析檔案失敗：' + err.message);
+    }
+  };
+
+  const handleCopyToClipboard = async (range) => {
+    try {
+      let exportAppts = [];
+      if (range === 'all') {
+        const res = await api.get('/api/appointments');
+        exportAppts = res.data || [];
+      } else {
+        exportAppts = appointments;
+      }
+
+      if (exportAppts.length === 0) {
+        alert('沒有可複製的排程資料');
+        return;
+      }
+
+      const headers = ['治療師姓名', '病人姓名', '預約星期', '開始時間', '時長(分鐘)', '病患類型', '交班備註'];
+      const dayNames = { 1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五' };
+      const typeNames = { 'outpatient': '門診', 'inpatient': '住院' };
+
+      const rows = exportAppts.map(appt => {
+        const therapist = therapists.find(t => t.id === appt.therapistId);
+        return [
+          therapist ? (therapist.name || therapist.username) : '未分配',
+          appt.patient,
+          dayNames[appt.day] || `週${appt.day}`,
+          appt.start,
+          appt.duration,
+          typeNames[appt.patientType] || '門診',
+          appt.handoverText || ''
+        ].join('\t');
+      });
+
+      const tsvContent = [headers.join('\t'), ...rows].join('\n');
+      await navigator.clipboard.writeText(tsvContent);
+      alert('📋 排程資料已成功複製到剪貼簿！\n您現在可以直接在 Google 試算表 (或 Excel) 中選擇任一個單格並直接按 Ctrl+V (或 Cmd+V) 貼上。');
+    } catch (err) {
+      console.error('Clipboard copy failed', err);
+      alert('複製失敗：' + err.message);
+    }
+  };
+
+  const handleImportGSheetsUrl = async (e) => {
+    e.preventDefault();
+
+    if (importTab === 'text') {
+      if (!importTextContent.trim()) {
+        alert('請貼上試算表內容！');
+        return;
+      }
+      setGSheetsImporting(true);
+      try {
+        const parsed = await parseImportText(importTextContent);
+        if (parsed.successData.length === 0 && parsed.errorRows.length === 1 && parsed.errorRows[0].rowNum === 1) {
+          alert(parsed.errorRows[0].error);
+          setGSheetsImporting(false);
+          return;
+        }
+        setGSheetsImportModalOpen(false);
+        setImportTextContent('');
+        await processImport(parsed.successData, parsed.errorRows);
+      } catch (err) {
+        console.error('Text import failed', err);
+        alert('解析貼上內容失敗：' + err.message);
+      } finally {
+        setGSheetsImporting(false);
+      }
+      return;
+    }
+
+    // 網址下載模式
+    if (!gSheetsUrl.trim()) return;
+
+    setGSheetsImporting(true);
+    try {
+      let fetchUrl = gSheetsUrl.trim();
+      
+      // 精密 Google Sheets 下載網址轉換
+      if (fetchUrl.includes('docs.google.com/spreadsheets')) {
+        // 1. 若本身包含 csv 輸出，則直接使用
+        if (fetchUrl.includes('output=csv') || fetchUrl.includes('/pub?')) {
+          // 不變
+        } 
+        // 2. 若為發布到網路的網頁版連結 (包含 /d/e/ 開頭且以 /pubhtml 或 /pub 結尾)
+        else if (fetchUrl.includes('/d/e/')) {
+          // 例如：https://docs.google.com/spreadsheets/d/e/2PACX-xxxx/pubhtml
+          fetchUrl = fetchUrl.replace(/\/pubhtml$/, '/pub?output=csv')
+                             .replace(/\/pub$/, '/pub?output=csv');
+          
+          if (!fetchUrl.includes('output=csv')) {
+            const matchPub = fetchUrl.match(/\/d\/e\/([a-zA-Z0-9-_]+)/);
+            if (matchPub && matchPub[1]) {
+              fetchUrl = `https://docs.google.com/spreadsheets/d/e/${matchPub[1]}/pub?output=csv`;
+            }
+          }
+        } 
+        // 3. 一般共用連結
+        else {
+          const match = fetchUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+          if (match && match[1]) {
+            fetchUrl = `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+          } else {
+            alert('無法解析 Google 試算表 ID。請確認連結格式。');
+            setGSheetsImporting(false);
+            return;
+          }
+        }
+      }
+
+      const axiosRes = await axios.get(fetchUrl, { responseType: 'blob' });
+      const blob = axiosRes.data;
+
+      const parsed = await parseImportFile(blob);
+      
+      if (parsed.successData.length === 0 && parsed.errorRows.length === 1 && parsed.errorRows[0].rowNum === 1) {
+        alert(parsed.errorRows[0].error);
+        setGSheetsImporting(false);
+        return;
+      }
+
+      setGSheetsImportModalOpen(false);
+      setGSheetsUrl('');
+      await processImport(parsed.successData, parsed.errorRows);
+    } catch (err) {
+      console.error('Google Sheets import failed', err);
+      
+      // 提供友善的替代操作指引
+      alert(
+        '從 Google 試算表下載失敗！\n錯誤原因：' + (err.response?.data?.error || err.message) + '\n\n' +
+        '💡 溫馨提示：可能是瀏覽器或本機網路環境限制了跨域下載 (CORS)。\n' +
+        '您可以點選視窗上方的「直接貼上內容」頁籤，全選複製試算表內容後貼上，即可免網路、100% 成功完成匯入！'
+      );
+    } finally {
+      setGSheetsImporting(false);
+    }
+  };
+
+  const processImport = async (parsedData, initialErrors) => {
+    if (parsedData.length === 0 && initialErrors.length === 0) {
+      alert('檔案中沒有找到有效的排程資料');
+      return;
+    }
+
+    let latestTherapists = [];
+    let latestAppointments = [];
+    try {
+      const tRes = await api.get('/api/therapists');
+      latestTherapists = tRes.data || [];
+      const aRes = await api.get('/api/appointments');
+      latestAppointments = aRes.data || [];
+    } catch (err) {
+      alert('無法取得系統最新資料，匯入終止');
+      return;
+    }
+
+    const currentTherapistNames = latestTherapists.map(t => (t.name || '').trim().toLowerCase());
+    const newTherapistNames = [];
+    
+    parsedData.forEach(row => {
+      if (row.therapistName) {
+        const nameTrim = row.therapistName.trim();
+        if (nameTrim && !currentTherapistNames.includes(nameTrim.toLowerCase()) && !newTherapistNames.includes(nameTrim)) {
+          newTherapistNames.push(nameTrim);
+        }
+      }
+    });
+
+    const addedTherapists = [];
+    const therapistMap = {};
+    latestTherapists.forEach(t => {
+      therapistMap[(t.name || '').trim().toLowerCase()] = t.id;
+    });
+
+    if (newTherapistNames.length > 0) {
+      const confirmCreate = confirm(
+        `偵測到檔案中包含 ${newTherapistNames.length} 位系統尚未建立的治療師：\n` +
+        `「${newTherapistNames.join(', ')}」\n\n` +
+        `點擊「確定」將會自動新增這些治療師並繼續匯入排程，點擊「取消」將終止匯入。`
+      );
+      
+      if (!confirmCreate) return;
+
+      try {
+        for (const name of newTherapistNames) {
+          const res = await api.post('/api/therapists', { name });
+          const newT = res.data;
+          therapistMap[name.toLowerCase()] = newT.id;
+          addedTherapists.push(name);
+        }
+        await fetchTherapists();
+      } catch (err) {
+        alert('建立治療師失敗，匯入終止：' + err.message);
+        return;
+      }
+    }
+
+    const errors = [...initialErrors];
+    let successCount = 0;
+    let failedCount = errors.length;
+
+    const occupancyMap = {};
+
+    latestAppointments.forEach(appt => {
+      // 僅統計開始時間那一格的人數
+      const key = `${appt.therapistId}|${appt.day}|${appt.start}`;
+      occupancyMap[key] = (occupancyMap[key] || 0) + 1;
+    });
+
+    for (const row of parsedData) {
+      let targetTherapistId = null;
+      if (row.therapistName) {
+        targetTherapistId = therapistMap[row.therapistName.trim().toLowerCase()];
+      } else {
+        targetTherapistId = selectedTherapistId;
+      }
+
+      if (!targetTherapistId) {
+        errors.push({
+          rowNum: row.rowNum,
+          patient: row.patient,
+          error: '未指定治療師，且系統中目前無選取的預設治療師'
+        });
+        failedCount++;
+        continue;
+      }
+
+      const startIdx = SLOTS.findIndex(s => formatTime(s.hour, s.minute) === row.start);
+      if (startIdx === -1) {
+        errors.push({
+          rowNum: row.rowNum,
+          patient: row.patient,
+          error: `開始時間 "${row.start}" 不在系統排程時間內`
+        });
+        failedCount++;
+        continue;
+      }
+
+      let collisionDetected = false;
+      let collisionTime = '';
+
+      const key = `${targetTherapistId}|${row.day}|${row.start}`;
+      const currentOccupancy = occupancyMap[key] || 0;
+
+      if (currentOccupancy >= 2) {
+        collisionDetected = true;
+        collisionTime = `${DAY_LABELS[row.day]} ${row.start}`;
+      }
+
+      if (collisionDetected) {
+        errors.push({
+          rowNum: row.rowNum,
+          patient: row.patient,
+          error: `時段人數已達上限 (2人) 衝突於 [${collisionTime}]`
+        });
+        failedCount++;
+        continue;
+      }
+
+      try {
+        const apptRes = await api.post('/api/appointments', {
+          therapistId: targetTherapistId,
+          patient: row.patient,
+          start: row.start,
+          duration: row.duration,
+          days: [row.day],
+          patientType: row.patientType
+        });
+
+        if (row.handoverText) {
+          const createdAppt = apptRes.data.success?.[0];
+          if (createdAppt && createdAppt.id) {
+            await api.patch(`/api/appointments/${createdAppt.id}/handover`, {
+              handoverText: row.handoverText
+            });
+          }
+        }
+
+        // 僅遞增開始時間那一格的計數
+        const successKey = `${targetTherapistId}|${row.day}|${row.start}`;
+        occupancyMap[successKey] = (occupancyMap[successKey] || 0) + 1;
+
+        successCount++;
+      } catch (err) {
+        errors.push({
+          rowNum: row.rowNum,
+          patient: row.patient,
+          error: '寫入資料庫失敗：' + (err.response?.data?.error || err.message)
+        });
+        failedCount++;
+      }
+    }
+
+    await fetchAppointments();
+    
+    errors.sort((a, b) => a.rowNum - b.rowNum);
+
+    setImportReport({
+      successCount,
+      failedCount,
+      errors,
+      addedTherapists
+    });
+    setReportModalOpen(true);
+  };
+
   const selectedTherapist = therapists.find(t => t.id === selectedTherapistId);
   const selectedTherapistName = selectedTherapist ? selectedTherapist.name : '';
 
@@ -654,178 +1088,253 @@ export default function App() {
         <h2>物理治療排程系統</h2>
 
         <div className="login-block">
-          <button onClick={handleLoginDemo}>示範登入 admin</button>
+          <button type="button" onClick={handleLoginDemo}>示範登入 admin</button>
           <div className="token-indicator">{token ? '已登入' : '未登入'}</div>
         </div>
 
         {/* Tab 頁面切換選單 */}
         <div className="tab-menu">
           <button 
+            type="button"
             className={`tab-btn ${currentTab === 'schedule' ? 'active' : ''}`}
             onClick={() => setCurrentTab('schedule')}
           >
-            週排程表
+            📅 週排程表
           </button>
           <button 
+            type="button"
             className={`tab-btn ${currentTab === 'patients' ? 'active' : ''}`}
             onClick={() => setCurrentTab('patients')}
           >
-            病人清單
+            👥 病人清單
           </button>
           <button 
+            type="button"
             className={`tab-btn ${currentTab === 'handover' ? 'active' : ''}`}
             onClick={() => setCurrentTab('handover')}
           >
-            病人交班
+            📝 病人交班
           </button>
         </div>
 
-        <div className="therapist-select">
-          <label>選擇治療師</label>
-          <select value={selectedTherapistId ?? ''} onChange={handleTherapistChange}>
-            {therapists.map(t => (
-              <option key={t.id} value={t.id}>{t.name || t.username}</option>
-            ))}
-            {!therapists.length && <option value="">無治療師</option>}
-          </select>
-          <button className="manage-btn" onClick={() => setManageModalOpen(true)}>
-            管理治療師
-          </button>
-        </div>
+        {/* 摺疊面板 (系統工具與報表) */}
+        <div className="sidebar-collapse-section">
+          <div 
+            className="sidebar-collapse-header"
+            onClick={() => setToolsExpanded(!toolsExpanded)}
+          >
+            <span>🛠️ 系統工具與報表</span>
+            <span className={`sidebar-collapse-arrow ${toolsExpanded ? 'expanded' : ''}`}>▶</span>
+          </div>
+          
+          {toolsExpanded && (
+            <div className="sidebar-collapse-body">
+              <button 
+                type="button"
+                onClick={handleReloadAll} 
+                className="wc-btn" 
+                style={{ padding: '8px', width: '100%', fontSize: '13px', background: '#334155', color: '#fff' }}
+              >
+                🔄 重新整理資料
+              </button>
 
-        {/* 預約新增表單 (僅在週排程 Tab 且有選取治療師時顯示) */}
-        {currentTab === 'schedule' && selectedTherapistId && (
-          <div className="sidebar-form-block" style={{ marginTop: '20px', borderTop: '1px solid #cbd5e1', paddingTop: '16px' }}>
-            <h4 style={{ fontSize: '14px', marginBottom: '10px', color: '#92400e', fontWeight: 'bold' }}>新增病人預約</h4>
-            <form onSubmit={handleCreateAppointment} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b5563' }}>病人姓名</label>
-                <input 
-                  type="text" 
-                  value={newApptPatient} 
-                  onChange={e => setNewApptPatient(e.target.value)} 
-                  placeholder="輸入姓名"
-                  required
-                  style={{ padding: '6px', fontSize: '13px', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-                />
+              <div className="print-actions-block" style={{ marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '8px' }}>
+                <button 
+                  type="button"
+                  className="wc-btn" 
+                  style={{ backgroundColor: '#1e40af', color: 'white', width: '100%', fontSize: '12px', padding: '8px', borderRadius: '6px', fontWeight: 'bold' }}
+                  onClick={() => {
+                    setPrintType('schedule');
+                    setPrintTherapistId(selectedTherapistId || (therapists[0]?.id || ''));
+                    setPrintTherapistMode('current');
+                    setPrintPatientType('');
+                    setPrintModalOpen(true);
+                  }}
+                >
+                  🖨️ 列印週排程表
+                </button>
+                <button 
+                  type="button"
+                  className="wc-btn" 
+                  style={{ backgroundColor: '#0f766e', color: 'white', width: '100%', fontSize: '12px', padding: '8px', borderRadius: '6px', fontWeight: 'bold', marginTop: '6px' }}
+                  onClick={() => {
+                    setPrintType('handover');
+                    setPrintTherapistId(selectedTherapistId || (therapists[0]?.id || ''));
+                    setPrintTherapistMode('current');
+                    setPrintPatientType('');
+                    setPrintModalOpen(true);
+                  }}
+                >
+                  🖨️ 列印病人交班單
+                </button>
               </div>
 
-              <div className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b5563' }}>預約星期</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {[1, 2, 3, 4, 5].map(d => (
-                    <label key={d} style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '2px', cursor: 'pointer' }}>
-                      <input 
-                        type="checkbox" 
-                        checked={newApptDays.includes(d)} 
-                        onChange={() => toggleNewApptDay(d)}
-                      />
-                      {DAY_LABELS[d]}
-                    </label>
-                  ))}
+              <div className="import-export-block" style={{ marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '8px' }}>
+                <div className="ie-btn-group">
+                  <button 
+                    type="button"
+                    className="ie-btn ie-btn-export-excel"
+                    onClick={() => handleExport('excel', 'current')}
+                  >
+                    📊 匯出當前排程 (Excel)
+                  </button>
+                  <button 
+                    type="button"
+                    className="ie-btn ie-btn-export-csv"
+                    onClick={() => handleExport('csv', 'current')}
+                  >
+                    📄 匯出當前排程 (CSV)
+                  </button>
+                  <button 
+                    type="button"
+                    className="ie-btn ie-btn-export-excel"
+                    style={{ backgroundColor: '#166534' }}
+                    onClick={() => handleExport('excel', 'all')}
+                  >
+                    🗂️ 匯出所有排程 (Excel)
+                  </button>
+                  <button 
+                    type="button"
+                    className="ie-btn ie-btn-export-csv"
+                    style={{ backgroundColor: '#075985' }}
+                    onClick={() => handleExport('csv', 'all')}
+                  >
+                    📝 匯出所有排程 (CSV)
+                  </button>
+                  
+                  <button 
+                    type="button"
+                    className="ie-btn ie-btn-import"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    📥 匯入排程檔案
+                  </button>
+                  <button 
+                    type="button"
+                    className="ie-btn"
+                    style={{ backgroundColor: '#15803d' }}
+                    onClick={() => handleCopyToClipboard('current')}
+                  >
+                    📋 複製目前排程 (貼上 Google)
+                  </button>
+                  <button 
+                    type="button"
+                    className="ie-btn"
+                    style={{ backgroundColor: '#166534' }}
+                    onClick={() => handleCopyToClipboard('all')}
+                  >
+                    📋 複製全體排程 (貼上 Google)
+                  </button>
+                  <button 
+                    type="button"
+                    className="ie-btn"
+                    style={{ backgroundColor: '#1e3a8a' }}
+                    onClick={() => setGSheetsImportModalOpen(true)}
+                  >
+                    🌐 讀取 Google 試算表網址匯入
+                  </button>
+                  <button 
+                    type="button"
+                    className="ie-btn"
+                    style={{ backgroundColor: '#d97706', marginTop: '4px' }}
+                    onClick={handleExportDatabase}
+                  >
+                    💾 備份資料庫 (JSON)
+                  </button>
+                  <button 
+                    type="button"
+                    className="ie-btn"
+                    style={{ backgroundColor: '#b45309' }}
+                    onClick={() => dbInputRef.current?.click()}
+                  >
+                    📂 還原資料庫 (JSON)
+                  </button>
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    accept=".xlsx, .xls, .csv"
+                    onChange={handleFileChange}
+                  />
+                  <input 
+                    type="file"
+                    ref={dbInputRef}
+                    style={{ display: 'none' }}
+                    accept=".json"
+                    onChange={handleImportDatabase}
+                  />
                 </div>
               </div>
-
-              <div className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b5563' }}>開始時間</label>
-                <select 
-                  value={newApptStartTime} 
-                  onChange={e => setNewApptStartTime(e.target.value)}
-                  style={{ padding: '6px', fontSize: '13px', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-                >
-                  {TIME_SLOTS.map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b5563' }}>時長</label>
-                <select 
-                  value={newApptDuration} 
-                  onChange={e => setNewApptDuration(Number(e.target.value))}
-                  style={{ padding: '6px', fontSize: '13px', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-                >
-                  <option value={30}>30分鐘</option>
-                  <option value={60}>60分鐘</option>
-                  <option value={90}>90分鐘</option>
-                </select>
-              </div>
-
-              <div className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#4b5563' }}>病患類型</label>
-                <select 
-                  value={newApptPatientType} 
-                  onChange={e => setNewApptPatientType(e.target.value)}
-                  style={{ padding: '6px', fontSize: '13px', border: '1px solid #cbd5e1', borderRadius: '4px' }}
-                >
-                  <option value="outpatient">門診</option>
-                  <option value="inpatient">住院</option>
-                </select>
-              </div>
-
-              <button type="submit" className="wc-btn wc-btn-primary" style={{ padding: '8px', fontSize: '13px', marginTop: '4px', width: '100%' }}>
-                新增預約
-              </button>
-            </form>
-          </div>
-        )}
-
-        <div className="actions" style={{ marginTop: '16px' }}>
-          <button onClick={handleReloadAll}>重新載入清單</button>
-        </div>
-
-        <div className="print-actions-block" style={{ marginTop: '20px', borderTop: '1px solid #cbd5e1', paddingTop: '16px' }}>
-          <h4 style={{ fontSize: '14px', marginBottom: '10px', color: '#1e3a8a', fontWeight: 'bold' }}>報表列印</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button 
-              className="wc-btn" 
-              style={{ backgroundColor: '#1e40af', color: 'white', width: '100%', fontSize: '13px', padding: '8px', borderRadius: '6px', fontWeight: 'bold' }}
-              onClick={() => {
-                setPrintType('schedule');
-                setPrintTherapistId(selectedTherapistId || (therapists[0]?.id || ''));
-                setPrintTherapistMode('current');
-                setPrintModalOpen(true);
-              }}
-            >
-              🖨️ 列印週排程表
-            </button>
-            <button 
-              className="wc-btn" 
-              style={{ backgroundColor: '#0f766e', color: 'white', width: '100%', fontSize: '13px', padding: '8px', borderRadius: '6px', fontWeight: 'bold' }}
-              onClick={() => {
-                setPrintType('handover');
-                setPrintTherapistId(selectedTherapistId || (therapists[0]?.id || ''));
-                setPrintTherapistMode('current');
-                setPrintModalOpen(true);
-              }}
-            >
-              🖨️ 列印病人交班單
-            </button>
-          </div>
+            </div>
+          )}
         </div>
       </aside>
 
-      <main className="main">
-        {currentTab === 'schedule' && (
-          <WeekCalendar 
-            therapistId={selectedTherapistId} 
-            therapistName={selectedTherapistName} 
-            appointments={appointments}
-            loading={apptLoading}
-          />
-        )}
-        {currentTab === 'patients' && <PatientList />}
-        {currentTab === 'handover' && (
-          <PatientHandover 
-            therapistId={selectedTherapistId} 
-            therapistName={selectedTherapistName} 
-            appointments={appointments}
-            loading={apptLoading}
-            onSave={fetchAppointments}
-          />
-        )}
-      </main>
+      <div className="main-wrapper">
+        <header className="top-header">
+          <div className="top-header-left">
+            <h1 className="top-header-title">
+              {currentTab === 'schedule' && "📅 週排程表"}
+              {currentTab === 'patients' && "👥 病人清單"}
+              {currentTab === 'handover' && "📝 病人交班備註"}
+            </h1>
+            <div className="top-header-subtitle">
+              {currentTab === 'schedule' && "檢視與排定每位治療師的每週工作日程 (單格限 4 人)"}
+              {currentTab === 'patients' && "查詢與管理院內病患基本資料與類型"}
+              {currentTab === 'handover' && "登錄及交付治療師與病人間的治療進度備註"}
+            </div>
+          </div>
+
+          <div className="top-header-right">
+            {(currentTab === 'schedule' || currentTab === 'handover') && (
+              <div className="header-select-group">
+                <label>選擇治療師</label>
+                <select value={selectedTherapistId ?? ''} onChange={handleTherapistChange}>
+                  {therapists.map(t => (
+                    <option key={t.id} value={t.id}>{t.name || t.username}</option>
+                  ))}
+                  {!therapists.length && <option value="">無治療師</option>}
+                </select>
+              </div>
+            )}
+            
+            <button type="button" className="header-btn-manage" onClick={() => setManageModalOpen(true)}>
+              ⚙️ 管理治療師
+            </button>
+
+            {currentTab === 'schedule' && selectedTherapistId && (
+              <button 
+                type="button"
+                className="header-btn-add-appt"
+                onClick={() => setApptModalOpen(true)}
+              >
+                ➕ 新增病人預約
+              </button>
+            )}
+          </div>
+        </header>
+
+        <main className="main">
+          {currentTab === 'schedule' && (
+            <WeekCalendar 
+              therapistId={selectedTherapistId} 
+              therapistName={selectedTherapistName} 
+              appointments={appointments}
+              loading={apptLoading}
+            />
+          )}
+          {currentTab === 'patients' && <PatientList />}
+          {currentTab === 'handover' && (
+            <PatientHandover 
+              therapistId={selectedTherapistId} 
+              therapistName={selectedTherapistName} 
+              appointments={appointments}
+              loading={apptLoading}
+              onSave={fetchAppointments}
+            />
+          )}
+        </main>
+      </div>
 
       {/* 治療師維護 Modal */}
       {manageModalOpen && (
@@ -962,8 +1471,23 @@ export default function App() {
                     style={{ padding: '6px', fontSize: '13px', border: '1px solid #cbd5e1', borderRadius: '4px', width: '100%', background: 'white' }}
                   >
                     {therapists.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
+                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
+                  </select>
+                </div>
+              )}
+
+              {printType === 'handover' && (
+                <div className="form-field" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#4b5563' }}>病人種類</label>
+                  <select 
+                    value={printPatientType} 
+                    onChange={e => setPrintPatientType(e.target.value)}
+                    style={{ padding: '6px', fontSize: '13px', border: '1px solid #cbd5e1', borderRadius: '4px', width: '100%', background: 'white' }}
+                  >
+                    <option value="">全部</option>
+                    <option value="outpatient">門診</option>
+                    <option value="inpatient">住院</option>
                   </select>
                 </div>
               )}
@@ -990,6 +1514,250 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 新增預約 Modal */}
+      {apptModalOpen && (
+        <div className="wc-modal-backdrop" onClick={() => setApptModalOpen(false)}>
+          <div className="wc-modal" style={{ width: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ color: 'var(--primary)' }}>
+              ➕ 新增病人預約 — {selectedTherapistName}
+            </h3>
+            
+            <form onSubmit={handleCreateAppointment}>
+              <div className="appt-form-grid">
+                <div className="form-field appt-form-full">
+                  <label className="appt-form-label">病人姓名</label>
+                  <input 
+                    type="text" 
+                    className="appt-form-input"
+                    value={newApptPatient} 
+                    onChange={e => setNewApptPatient(e.target.value)} 
+                    placeholder="例如：王小明"
+                    required
+                  />
+                </div>
+
+                <div className="form-field appt-form-full">
+                  <label className="appt-form-label">預約星期 (複選)</label>
+                  <div className="days-checkbox-group">
+                    {[1, 2, 3, 4, 5].map(d => (
+                      <label key={d} className="days-checkbox-label">
+                        <input 
+                          type="checkbox" 
+                          checked={newApptDays.includes(d)} 
+                          onChange={() => toggleNewApptDay(d)}
+                        />
+                        {DAY_LABELS[d]}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="form-field">
+                  <label className="appt-form-label">開始時間</label>
+                  <select 
+                    value={newApptStartTime} 
+                    onChange={e => setNewApptStartTime(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    {TIME_SLOTS.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-field">
+                  <label className="appt-form-label">時長</label>
+                  <select 
+                    value={newApptDuration} 
+                    onChange={e => setNewApptDuration(Number(e.target.value))}
+                    style={{ width: '100%' }}
+                  >
+                    <option value={30}>30 分鐘</option>
+                    <option value={60}>60 分鐘</option>
+                    <option value={90}>90 分鐘</option>
+                  </select>
+                </div>
+
+                <div className="form-field appt-form-full">
+                  <label className="appt-form-label">病患類型</label>
+                  <select 
+                    value={newApptPatientType} 
+                    onChange={e => setNewApptPatientType(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="outpatient">門診 (Outpatient)</option>
+                    <option value="inpatient">住院 (Inpatient)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="wc-form-actions">
+                <button 
+                  type="button" 
+                  className="wc-btn wc-btn-secondary" 
+                  onClick={() => setApptModalOpen(false)}
+                >
+                  取消
+                </button>
+                <button type="submit" className="wc-btn">
+                  確認新增
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Google 試算表與貼上匯入 Modal */}
+      {gSheetsImportModalOpen && (
+        <div className="wc-modal-backdrop" onClick={() => setGSheetsImportModalOpen(false)}>
+          <div className="wc-modal" style={{ width: '560px' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ color: 'var(--primary)', borderBottom: '1px solid #cbd5e1', paddingBottom: '8px', marginBottom: '12px' }}>
+              🌐 雲端與複製貼上匯入排程
+            </h3>
+
+            {/* 頁籤選單 */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px' }}>
+              <button
+                type="button"
+                className={`tab-btn ${importTab === 'url' ? 'active' : ''}`}
+                style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '6px', border: '1px solid #cbd5e1', cursor: 'pointer', background: importTab === 'url' ? '#2563eb' : '#f8fafc', color: importTab === 'url' ? '#fff' : '#475569', fontWeight: 'bold' }}
+                onClick={() => setImportTab('url')}
+              >
+                🔗 讀取雲端網址
+              </button>
+              <button
+                type="button"
+                className={`tab-btn ${importTab === 'text' ? 'active' : ''}`}
+                style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '6px', border: '1px solid #cbd5e1', cursor: 'pointer', background: importTab === 'text' ? '#2563eb' : '#f8fafc', color: importTab === 'text' ? '#fff' : '#475569', fontWeight: 'bold' }}
+                onClick={() => setImportTab('text')}
+              >
+                📋 直接貼上內容 (100% 成功)
+              </button>
+            </div>
+            
+            <form onSubmit={handleImportGSheetsUrl}>
+              {importTab === 'url' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div className="form-field">
+                    <label className="appt-form-label">Google 試算表網址</label>
+                    <input 
+                      type="url" 
+                      className="appt-form-input"
+                      value={gSheetsUrl} 
+                      onChange={e => setGSheetsUrl(e.target.value)} 
+                      placeholder="請貼上「共用連結」或「發布至網路的網頁連結」"
+                      required
+                      style={{ width: '100%' }}
+                      disabled={gSheetsImporting}
+                    />
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: '#1e3a8a', backgroundColor: '#eff6ff', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #2563eb', lineHeight: '1.5', textAlign: 'left' }}>
+                    💡 <b>設定方式與說明：</b>
+                    <div style={{ marginTop: '4px' }}>
+                      1. <b>使用共用連結（最推薦）</b>：在 Google 試算表右上方點擊「共用」，將存取權設為<b>「知道連結的任何人均可檢視」</b>，然後複製連結貼在上方。
+                    </div>
+                    <div style={{ marginTop: '2px' }}>
+                      2. <b>使用發布網址</b>：在試算表點擊「檔案」&gt;「分享」&gt;「發布到網路」，選取「整份文件」與<b>「網頁」或「CSV」</b>，發布後將連結貼在上方。
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div className="form-field">
+                    <label className="appt-form-label">請在此貼上試算表內容 (支援 TSV/CSV 格式)</label>
+                    <textarea
+                      className="handover-textarea"
+                      value={importTextContent}
+                      onChange={e => setImportTextContent(e.target.value)}
+                      placeholder="操作方式：&#13;1. 請打開您的 Google 試算表&#13;2. 按下鍵盤 Ctrl + A (或 Cmd + A) 全選，再按 Ctrl + C 複製&#13;3. 點選此處並按 Ctrl + V 貼上，最後按下下方開始匯入！"
+                      style={{ width: '100%', height: '160px', fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' }}
+                      required
+                      disabled={gSheetsImporting}
+                    />
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: '#166534', backgroundColor: '#f0fdf4', padding: '10px', borderRadius: '8px', borderLeft: '4px solid #16a34a', lineHeight: '1.4', textAlign: 'left' }}>
+                    💡 <b>離線貼上特色：</b>完全不需要網路請求與跨域 CORS 設定，100% 避開瀏覽器 Network Error 的限制，是跨電腦同步與快速匯入排程最可靠的方式。
+                  </div>
+                </div>
+              )}
+
+              <div className="wc-form-actions" style={{ marginTop: '16px' }}>
+                <button 
+                  type="button" 
+                  className="wc-btn wc-btn-secondary" 
+                  onClick={() => setGSheetsImportModalOpen(false)}
+                  disabled={gSheetsImporting}
+                >
+                  取消
+                </button>
+                <button type="submit" className="wc-btn" disabled={gSheetsImporting}>
+                  {gSheetsImporting ? '讀取並匯入中...' : '開始匯入'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 匯入報告 Modal */}
+      {reportModalOpen && (
+        <div className="wc-modal-backdrop" onClick={() => setReportModalOpen(false)}>
+          <div className="wc-modal" style={{ width: '500px' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: '18px', borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', marginBottom: '16px', color: '#0f766e' }}>
+              📊 檔案匯入報告
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '16px', fontSize: '14px' }}>
+                <div>成功匯入：<span className="report-success">{importReport.successCount} 筆</span></div>
+                <div>失敗/跳過：<span className="report-failed" style={{ color: '#dc2626', fontWeight: 600 }}>{importReport.failedCount} 筆</span></div>
+              </div>
+
+              {importReport.addedTherapists.length > 0 && (
+                <div style={{ fontSize: '13px', backgroundColor: '#f0fdf4', borderLeft: '3px solid #16a34a', padding: '8px', borderRadius: '4px', marginTop: '4px' }}>
+                  <b>🆕 自動新增的治療師：</b>
+                  <div style={{ marginTop: '2px', color: '#166534' }}>
+                    {importReport.addedTherapists.join(', ')}
+                  </div>
+                </div>
+              )}
+
+              {importReport.errors.length > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', color: '#4b5563' }}>失敗/衝突明細：</label>
+                  <div className="report-content">
+                    {importReport.errors.map((err, idx) => (
+                      <div key={idx} className="report-item">
+                        <span style={{ fontWeight: 'bold', color: '#64748b' }}>第 {err.rowNum} 列</span> (病人: {err.patient})：
+                        <span className="report-error" style={{ marginLeft: '4px' }}>{err.error}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: '11px', color: '#475569', marginTop: '8px' }}>
+                💡 <b>說明：</b>匯入失敗的排程已被安全跳過，不會影響資料庫中的現有排程。您可以修正檔案後重新匯入。
+              </div>
+
+              <div className="wc-form-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                <button 
+                  type="button" 
+                  className="wc-btn wc-btn-secondary" 
+                  onClick={() => setReportModalOpen(false)}
+                  style={{ backgroundColor: '#e5e7eb', color: '#374151' }}
+                >
+                  確認
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

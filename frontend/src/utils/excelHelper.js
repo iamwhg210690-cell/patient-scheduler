@@ -1,0 +1,316 @@
+import * as XLSX from 'xlsx';
+
+// 星期對照表
+const DAY_MAP_CN_TO_NUM = {
+  '週一': 1, '星期一': 1, '一': 1, '1': 1,
+  '週二': 2, '星期二': 2, '二': 2, '2': 2,
+  '週三': 3, '星期三': 3, '三': 3, '3': 3,
+  '週四': 4, '星期四': 4, '四': 4, '4': 4,
+  '週五': 5, '星期五': 5, '五': 5, '5': 5
+};
+
+const DAY_MAP_NUM_TO_CN = {
+  1: '週一', 2: '週二', 3: '週三', 4: '週四', 5: '週五'
+};
+
+// 病患類型對照表
+const TYPE_MAP_CN_TO_EN = {
+  '門診': 'outpatient', 'outpatient': 'outpatient',
+  '住院': 'inpatient', 'inpatient': 'inpatient'
+};
+
+const TYPE_MAP_EN_TO_CN = {
+  'outpatient': '門診', 'inpatient': '住院'
+};
+
+/**
+ * 核心解析與驗證資料列邏輯 (抽離為公用函式)
+ * @param {Array} rawRows 
+ * @returns {{successData: Array, errorRows: Array}}
+ */
+export function parseRawRows(rawRows) {
+  if (rawRows.length < 2) {
+    return { successData: [], errorRows: [{ rowNum: 1, error: '資料內容為空或缺少標題列' }] };
+  }
+
+  const headers = rawRows[0].map(h => String(h || '').trim());
+  const dataRows = rawRows.slice(1);
+
+  // 寬鬆比對欄位索引的輔助函式
+  const findHeaderIndex = (aliases) => {
+    return headers.findIndex(h => 
+      aliases.some(alias => h.toLowerCase().includes(alias.toLowerCase()))
+    );
+  };
+
+  const idxTherapist = findHeaderIndex(['治療師', 'therapist']);
+  const idxPatient = findHeaderIndex(['病人姓名', '病人', '病患', 'patient']);
+  const idxDay = findHeaderIndex(['預約星期', '星期', '星期幾', 'day']);
+  const idxStart = findHeaderIndex(['開始時間', '時間', '開始', 'start']);
+  const idxDuration = findHeaderIndex(['時長', '時間長度', 'duration']);
+  const idxType = findHeaderIndex(['病患類型', '類型', 'patientType']);
+  const idxHandover = findHeaderIndex(['交班備註', '備註', '交班', 'handoverText']);
+
+  // 如果找不到最關鍵的「病人姓名」欄位，直接報錯
+  if (idxPatient === -1) {
+    return { 
+      successData: [], 
+      errorRows: [{ rowNum: 1, error: `找不到必要的「病人姓名」欄位。現有欄位為：${headers.join(', ')}` }] 
+    };
+  }
+
+  const successData = [];
+  const errorRows = [];
+
+  dataRows.forEach((row, index) => {
+    const rowNum = index + 2; // 1-based index, 扣除標題列所以 +2
+    
+    // 跳過空白列
+    if (!row || row.filter(cell => cell !== null && cell !== undefined && String(cell).trim() !== '').length === 0) {
+      return;
+    }
+
+    const therapistVal = idxTherapist !== -1 ? String(row[idxTherapist] || '').trim() : '';
+    const patientVal = idxPatient !== -1 ? String(row[idxPatient] || '').trim() : '';
+    const dayVal = idxDay !== -1 ? String(row[idxDay] || '').trim() : '';
+    const startVal = idxStart !== -1 ? String(row[idxStart] || '').trim() : '';
+    const durationVal = idxDuration !== -1 ? String(row[idxDuration] || '').trim() : '';
+    const typeVal = idxType !== -1 ? String(row[idxType] || '').trim() : '';
+    const handoverVal = idxHandover !== -1 ? String(row[idxHandover] || '') : '';
+
+    const errors = [];
+
+    // 1. 驗證病人姓名
+    if (!patientVal) {
+      errors.push('病人姓名不能為空白');
+    }
+
+    // 2. 驗證預約星期 (支援以分號、逗號、頓號、斜線分隔的多個星期)
+    const parsedDays = [];
+    if (!dayVal) {
+      errors.push('未指定預約星期');
+    } else {
+      const dayParts = dayVal.split(/[\s;；,，、/]+/);
+      const invalidParts = [];
+
+      dayParts.forEach(part => {
+        const cleanPart = part.trim();
+        if (!cleanPart) return;
+
+        let dayNum = DAY_MAP_CN_TO_NUM[cleanPart];
+        if (!dayNum) {
+          const num = parseInt(cleanPart, 10);
+          if (num >= 1 && num <= 5) {
+            dayNum = num;
+          }
+        }
+
+        if (dayNum) {
+          parsedDays.push(dayNum);
+        } else {
+          invalidParts.push(cleanPart);
+        }
+      });
+
+      if (parsedDays.length === 0) {
+        errors.push(`未指定有效的預約星期 ("${dayVal}")`);
+      } else if (invalidParts.length > 0) {
+        errors.push(`部分預約星期格式錯誤：包含無效值 "${invalidParts.join(', ')}"`);
+      }
+    }
+
+    // 3. 驗證開始時間 (例如 "08:00")
+    let startTime = startVal;
+    if (!startTime) {
+      errors.push('未指定開始時間');
+    } else {
+      // 嘗試將 "8:00" 轉換成 "08:00" 等標準格式
+      if (/^\d{1}:\d{2}$/.test(startTime)) {
+        startTime = '0' + startTime;
+      }
+      if (!/^\d{2}:\d{2}$/.test(startTime)) {
+        errors.push(`開始時間格式錯誤 ("${startVal}")，應為 HH:MM`);
+      }
+    }
+
+    // 4. 驗證時長 (預設 30 分鐘，僅支援 30, 60, 90)
+    let duration = 30;
+    if (durationVal) {
+      const parsedDur = parseInt(durationVal, 10);
+      if ([30, 60, 90].includes(parsedDur)) {
+        duration = parsedDur;
+      } else {
+        errors.push(`預約時長必須為 30、60 或 90 分鐘 ("${durationVal}")`);
+      }
+    }
+
+    // 5. 驗證病患類型 (預設門診)
+    let patientType = 'outpatient';
+    if (typeVal) {
+      const mappedType = TYPE_MAP_CN_TO_EN[typeVal];
+      if (mappedType) {
+        patientType = mappedType;
+      } else {
+        errors.push(`病患類型格式錯誤 ("${typeVal}")，應為「門診」或「住院」`);
+      }
+    }
+
+    if (errors.length > 0) {
+      errorRows.push({
+        rowNum,
+        patient: patientVal || '未填寫',
+        error: errors.join('；')
+      });
+    } else {
+      parsedDays.forEach(dayNum => {
+        successData.push({
+          rowNum,
+          therapistName: therapistVal || null, // 若空白，則在匯入流程中對應至當前選擇的治療師
+          patient: patientVal,
+          day: dayNum,
+          start: startTime,
+          duration,
+          patientType,
+          handoverText: handoverVal.trim()
+        });
+      });
+    }
+  });
+
+  return { successData, errorRows };
+}
+
+/**
+ * 解析匯入的 Excel 或 CSV 檔案 (讀取 ArrayBuffer 格式)
+ * @param {File|Blob} file 
+ * @returns {Promise<{successData: Array, errorRows: Array}>}
+ */
+export function parseImportFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // 讀取為二維陣列
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        resolve(parseRawRows(rawRows));
+      } catch (err) {
+        reject(new Error(`解析檔案失敗：${err.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error('讀取檔案時發生錯誤'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * 解析匯入的貼上純文字 (TSV/CSV 格式)
+ * @param {string} text 
+ * @returns {Promise<{successData: Array, errorRows: Array}>}
+ */
+export function parseImportText(text) {
+  return new Promise((resolve) => {
+    try {
+      const workbook = XLSX.read(text, { type: 'string' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      // 讀取為二維陣列
+      const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      resolve(parseRawRows(rawRows));
+    } catch (err) {
+      resolve({
+        successData: [],
+        errorRows: [{ rowNum: 1, error: `解析貼上內容失敗：${err.message}` }]
+      });
+    }
+  });
+}
+
+/**
+ * 匯出預約排程為 Excel 檔案 (.xlsx)
+ * @param {Array} appointments 
+ * @param {Array} therapists 
+ * @param {string} fileName 
+ */
+export function exportToExcel(appointments, therapists, fileName = '治療排程表') {
+  const data = appointments.map(appt => {
+    const therapist = therapists.find(t => t.id === appt.therapistId);
+    return {
+      '治療師姓名': therapist ? (therapist.name || therapist.username) : '未分配',
+      '病人姓名': appt.patient,
+      '預約星期': DAY_MAP_NUM_TO_CN[appt.day] || `週${appt.day}`,
+      '開始時間': appt.start,
+      '時長(分鐘)': appt.duration,
+      '病患類型': TYPE_MAP_EN_TO_CN[appt.patientType] || '門診',
+      '交班備註': appt.handoverText || ''
+    };
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, '排程資料');
+  
+  // 欄位寬度微調
+  worksheet['!cols'] = [
+    { wch: 15 }, // 治療師姓名
+    { wch: 15 }, // 病人姓名
+    { wch: 10 }, // 預約星期
+    { wch: 10 }, // 開始時間
+    { wch: 12 }, // 時長(分鐘)
+    { wch: 10 }, // 病患類型
+    { wch: 35 }  // 交班備註
+  ];
+
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
+  triggerDownload(blob, `${fileName}.xlsx`);
+}
+
+/**
+ * 匯出預約排程為 CSV 檔案
+ * @param {Array} appointments 
+ * @param {Array} therapists 
+ * @param {string} fileName 
+ */
+export function exportToCSV(appointments, therapists, fileName = '治療排程表') {
+  const data = appointments.map(appt => {
+    const therapist = therapists.find(t => t.id === appt.therapistId);
+    return {
+      '治療師姓名': therapist ? (therapist.name || therapist.username) : '未分配',
+      '病人姓名': appt.patient,
+      '預約星期': DAY_MAP_NUM_TO_CN[appt.day] || `週${appt.day}`,
+      '開始時間': appt.start,
+      '時長(分鐘)': appt.duration,
+      '病患類型': TYPE_MAP_EN_TO_CN[appt.patientType] || '門診',
+      '交班備註': appt.handoverText || ''
+    };
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(data);
+  const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+  
+  // 加上 UTF-8 BOM (\uFEFF) 防止 Microsoft Excel 直接開啟 CSV 時中文字亂碼
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  triggerDownload(blob, `${fileName}.csv`);
+}
+
+/**
+ * 觸發瀏覽器下載檔案
+ * @param {Blob} blob 
+ * @param {string} filename 
+ */
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

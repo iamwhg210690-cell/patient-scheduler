@@ -8,6 +8,7 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
   // 搜尋過濾條件
   const [search, setSearch] = useState("");
   const [selectedDay, setSelectedDay] = useState("");
+  const [selectedPatientType, setSelectedPatientType] = useState("");
 
   // 儲存狀態標記 { [patientName]: 'idle' | 'saving' | 'saved' }
   const [saveStatus, setSaveStatus] = useState({});
@@ -34,6 +35,7 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
           therapistId: appt.therapistId,
           therapistName: appt.therapistName,
           handoverText: appt.handoverText || "",
+          patientType: appt.patientType || "outpatient",
           appointments: [],
         };
       }
@@ -66,6 +68,7 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
         therapistId: group.therapistId,
         therapistName: group.therapistName,
         handoverText: group.handoverText,
+        patientType: group.patientType,
         frequencyStr,
         timeDetailsStr,
         appointments: sortedAppts,
@@ -126,7 +129,11 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
     const matchesDay =
       selectedDay === "" || group.appointments.some((a) => String(a.day) === String(selectedDay));
       
-    return matchesKeyword && matchesDay;
+    // 病人種類篩選
+    const matchesType =
+      selectedPatientType === "" || group.patientType === selectedPatientType;
+
+    return matchesKeyword && matchesDay && matchesType;
   });
 
   if (!therapistId) {
@@ -173,6 +180,19 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
               <option value="3">週三</option>
               <option value="4">週四</option>
               <option value="5">週五</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>病人種類</label>
+            <select
+              value={selectedPatientType}
+              onChange={(e) => setSelectedPatientType(e.target.value)}
+              className="filter-input"
+            >
+              <option value="">全部</option>
+              <option value="outpatient">門診</option>
+              <option value="inpatient">住院</option>
             </select>
           </div>
         </div>

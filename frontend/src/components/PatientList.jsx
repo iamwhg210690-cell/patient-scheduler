@@ -43,6 +43,7 @@ export default function PatientList() {
   const [search, setSearch] = useState("");
   const [selectedDay, setSelectedDay] = useState("");
   const [selectedTherapistId, setSelectedTherapistId] = useState("");
+  const [selectedPatientType, setSelectedPatientType] = useState("");
 
   // 編輯與詳細資料 Modal 控制
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -145,9 +146,13 @@ export default function PatientList() {
       const matchesTherapist =
         selectedTherapistId === "" || pg.therapistIds.includes(selectedTherapistId);
 
-      return matchesKeyword && matchesDay && matchesTherapist;
+      // 病人種類篩選
+      const matchesType =
+        selectedPatientType === "" || pg.patientType === selectedPatientType;
+
+      return matchesKeyword && matchesDay && matchesTherapist && matchesType;
     });
-  }, [patientGroups, search, selectedDay, selectedTherapistId]);
+  }, [patientGroups, search, selectedDay, selectedTherapistId, selectedPatientType]);
 
   function openDetail(patientGroup) {
     setSelectedPatientGroup(patientGroup);
@@ -224,34 +229,17 @@ export default function PatientList() {
       alert("無效的開始時間");
       return;
     }
-    const span = Math.max(1, Math.round(duration / 30));
 
-    // 檢查將佔用的每個 30 分鐘 slot
-    for (let i = 0; i < span; i++) {
-      const currentSlotIdx = startIdx + i;
-      if (currentSlotIdx >= SLOTS.length) {
-        alert("時長超出排程時間範圍！");
-        return;
-      }
+    // 算出在此開始時間 slot 內已有的人數 (排除目前正在編輯的這一筆 appt.id)
+    const currentOccupancy = appointments.filter(a => {
+      if (a.id === appt.id) return false; // 排除自己
+      return a.day === day && a.therapistId === therapistId && a.start === start;
+    }).length;
 
-      const targetTimeStr = formatTime(SLOTS[currentSlotIdx].hour, SLOTS[currentSlotIdx].minute);
-
-      // 算出在此 slot 內已有的人數 (排除目前正在編輯的這一筆 appt.id)
-      const currentOccupancy = appointments.filter(a => {
-        if (a.id === appt.id) return false; // 排除自己
-        if (a.day !== day) return false;
-        if (a.therapistId !== therapistId) return false;
-        
-        const aStartIdx = SLOTS.findIndex(s => formatTime(s.hour, s.minute) === a.start);
-        const aSpan = Math.max(1, Math.round(a.duration / 30));
-        return currentSlotIdx >= aStartIdx && currentSlotIdx < aStartIdx + aSpan;
-      }).length;
-
-      if (currentOccupancy >= 4) {
-        const tName = therapists.find(t => t.id === therapistId)?.name || therapistId;
-        alert(`⚠️ 預約衝突！\n治療師「${tName}」在 ${dayLabels[day]} ${targetTimeStr} 的預約人數已達上限（${currentOccupancy}/4），無法儲存此變更。`);
-        return; // 阻擋儲存
-      }
+    if (currentOccupancy >= 2) {
+      const tName = therapists.find(t => t.id === therapistId)?.name || therapistId;
+      alert(`⚠️ 預約衝突！\n治療師「${tName}」在 ${dayLabels[day]} ${start} 的預約人數已達上限（${currentOccupancy}/2），無法儲存此變更。`);
+      return; // 阻擋儲存
     }
 
     try {
@@ -393,6 +381,19 @@ export default function PatientList() {
                   {t.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>病人種類</label>
+            <select
+              value={selectedPatientType}
+              onChange={(e) => setSelectedPatientType(e.target.value)}
+              className="filter-input"
+            >
+              <option value="">全部</option>
+              <option value="outpatient">門診</option>
+              <option value="inpatient">住院</option>
             </select>
           </div>
         </div>
