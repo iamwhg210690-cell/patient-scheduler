@@ -72,6 +72,9 @@ export default function App() {
   const [newApptStartTime, setNewApptStartTime] = useState("08:00");
   const [newApptDuration, setNewApptDuration] = useState(30);
   const [newApptPatientType, setNewApptPatientType] = useState("outpatient");
+  const [newApptOtTime, setNewApptOtTime] = useState("");
+  const [newApptStTime, setNewApptStTime] = useState("");
+  const [selectedTherapistIdInModal, setSelectedTherapistIdInModal] = useState("");
 
   // 管理 Modal 相關 State
   const [manageModalOpen, setManageModalOpen] = useState(false);
@@ -126,7 +129,10 @@ export default function App() {
     }
     setApptLoading(true);
     try {
-      const res = await api.get(`/api/appointments?therapistId=${selectedTherapistId}`);
+      const url = selectedTherapistId === 'all'
+        ? '/api/appointments'
+        : `/api/appointments?therapistId=${selectedTherapistId}`;
+      const res = await api.get(url);
       setAppointments(res.data || []);
     } catch (err) {
       console.error('fetchAppointments error', err);
@@ -241,6 +247,12 @@ export default function App() {
       return;
     }
 
+    const targetTherapistId = selectedTherapistId === 'all' ? selectedTherapistIdInModal : selectedTherapistId;
+    if (!targetTherapistId) {
+      alert("請選擇負責治療師");
+      return;
+    }
+
     // --- 衝突判定邏輯 ---
     const startIdx = SLOTS.findIndex(s => formatTime(s.hour, s.minute) === newApptStartTime);
     if (startIdx === -1) {
@@ -252,7 +264,7 @@ export default function App() {
     for (const day of newApptDays) {
       // 算出在該星期的該開始時間，已有的預約人數
       const currentOccupancy = appointments.filter(a => {
-        return a.day === day && a.start === newApptStartTime;
+        return a.therapistId === targetTherapistId && a.day === day && a.start === newApptStartTime;
       }).length;
       
       if (currentOccupancy >= 2) {
@@ -264,12 +276,14 @@ export default function App() {
     // 檢查通過，發送新增請求
     try {
       await api.post('/api/appointments', {
-        therapistId: selectedTherapistId,
+        therapistId: targetTherapistId,
         patient: newApptPatient.trim(),
         start: newApptStartTime,
         duration: newApptDuration,
         days: newApptDays,
-        patientType: newApptPatientType
+        patientType: newApptPatientType,
+        otTime: newApptOtTime.trim(),
+        stTime: newApptStTime.trim()
       });
       
       // 重設表單
@@ -278,6 +292,8 @@ export default function App() {
       setNewApptStartTime("08:00");
       setNewApptDuration(30);
       setNewApptPatientType("outpatient");
+      setNewApptOtTime("");
+      setNewApptStTime("");
       
       // 重新載入預約
       await fetchAppointments();
@@ -1117,6 +1133,17 @@ export default function App() {
           </button>
         </div>
 
+        <div style={{ padding: '0 12px', marginTop: '12px', marginBottom: '12px' }}>
+          <button 
+            type="button"
+            onClick={handleReloadAll} 
+            className="wc-btn" 
+            style={{ padding: '10px', width: '100%', fontSize: '14px', background: '#334155', color: '#fff', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            🔄 重新整理資料
+          </button>
+        </div>
+
         {/* 摺疊面板 (系統工具與報表) */}
         <div className="sidebar-collapse-section">
           <div 
@@ -1129,16 +1156,7 @@ export default function App() {
           
           {toolsExpanded && (
             <div className="sidebar-collapse-body">
-              <button 
-                type="button"
-                onClick={handleReloadAll} 
-                className="wc-btn" 
-                style={{ padding: '8px', width: '100%', fontSize: '13px', background: '#334155', color: '#fff' }}
-              >
-                🔄 重新整理資料
-              </button>
-
-              <div className="print-actions-block" style={{ marginTop: '4px', borderTop: '1px solid #1e293b', paddingTop: '8px' }}>
+              <div className="print-actions-block" style={{ marginTop: '0px', paddingTop: '0px' }}>
                 <button 
                   type="button"
                   className="wc-btn" 
@@ -1290,6 +1308,7 @@ export default function App() {
               <div className="header-select-group">
                 <label>選擇治療師</label>
                 <select value={selectedTherapistId ?? ''} onChange={handleTherapistChange}>
+                  {currentTab === 'schedule' && <option value="all">全部治療師</option>}
                   {therapists.map(t => (
                     <option key={t.id} value={t.id}>{t.name || t.username}</option>
                   ))}
@@ -1306,7 +1325,10 @@ export default function App() {
               <button 
                 type="button"
                 className="header-btn-add-appt"
-                onClick={() => setApptModalOpen(true)}
+                onClick={() => {
+                  setApptModalOpen(true);
+                  setSelectedTherapistIdInModal(selectedTherapistId === 'all' ? (therapists[0]?.id || '') : selectedTherapistId);
+                }}
               >
                 ➕ 新增病人預約
               </button>
@@ -1321,6 +1343,7 @@ export default function App() {
               therapistName={selectedTherapistName} 
               appointments={appointments}
               loading={apptLoading}
+              therapists={therapists}
             />
           )}
           {currentTab === 'patients' && <PatientList />}
@@ -1523,11 +1546,28 @@ export default function App() {
         <div className="wc-modal-backdrop" onClick={() => setApptModalOpen(false)}>
           <div className="wc-modal" style={{ width: '500px' }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ color: 'var(--primary)' }}>
-              ➕ 新增病人預約 — {selectedTherapistName}
+              ➕ 新增病人預約 — {selectedTherapistId === 'all' ? '全部治療師' : selectedTherapistName}
             </h3>
             
             <form onSubmit={handleCreateAppointment}>
               <div className="appt-form-grid">
+                {selectedTherapistId === 'all' && (
+                  <div className="form-field appt-form-full">
+                    <label className="appt-form-label">負責治療師</label>
+                    <select
+                      value={selectedTherapistIdInModal}
+                      onChange={e => setSelectedTherapistIdInModal(e.target.value)}
+                      style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                      required
+                    >
+                      <option value="">請選擇治療師</option>
+                      {therapists.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="form-field appt-form-full">
                   <label className="appt-form-label">病人姓名</label>
                   <input 
@@ -1592,6 +1632,30 @@ export default function App() {
                     <option value="outpatient">門診 (Outpatient)</option>
                     <option value="inpatient">住院 (Inpatient)</option>
                   </select>
+                </div>
+
+                <div className="form-field">
+                  <label className="appt-form-label">職能治療時段 (限20字)</label>
+                  <input 
+                    type="text" 
+                    className="appt-form-input"
+                    value={newApptOtTime} 
+                    onChange={e => setNewApptOtTime(e.target.value)} 
+                    placeholder="例如：09:00"
+                    maxLength={20}
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="appt-form-label">語言治療時段 (限20字)</label>
+                  <input 
+                    type="text" 
+                    className="appt-form-input"
+                    value={newApptStTime} 
+                    onChange={e => setNewApptStTime(e.target.value)} 
+                    placeholder="例如：待排"
+                    maxLength={20}
+                  />
                 </div>
               </div>
 

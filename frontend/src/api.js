@@ -97,7 +97,7 @@ const api = {
     }
     
     if (url === '/api/appointments') {
-      const { therapistId, patient, start, duration, days, patientType } = body;
+      const { therapistId, patient, start, duration, days, patientType, otTime, stTime } = body;
       const appointments = getStorage('appointments', []);
       const created = [];
       
@@ -110,7 +110,9 @@ const api = {
           duration: Number(duration),
           day: Number(day),
           patientType: patientType || 'outpatient',
-          handoverText: ''
+          handoverText: '',
+          otTime: otTime || '',
+          stTime: stTime || ''
         };
         appointments.push(newAppt);
         created.push(newAppt);
@@ -122,13 +124,13 @@ const api = {
     
     throw new Error(`404 Not Found: POST ${url}`);
   },
-
+ 
   async put(url, body) {
     await delay();
     
     if (url.startsWith('/api/appointments/')) {
       const id = url.split('/').pop();
-      const { patient, start, duration, day, patientType, handoverText, therapistId } = body;
+      const { patient, start, duration, day, patientType, handoverText, therapistId, otTime, stTime } = body;
       
       const appointments = getStorage('appointments', []);
       const idx = appointments.findIndex(a => a.id === id);
@@ -146,7 +148,9 @@ const api = {
         day: Number(day),
         patientType: patientType || 'outpatient',
         handoverText: handoverText ?? '',
-        therapistId
+        therapistId,
+        otTime: otTime || '',
+        stTime: stTime || ''
       };
       
       setStorage('appointments', appointments);

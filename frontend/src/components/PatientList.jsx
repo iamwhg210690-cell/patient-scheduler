@@ -57,6 +57,8 @@ export default function PatientList() {
     duration: 30,
     patientType: "outpatient",
     therapistId: "",
+    otTime: "",
+    stTime: "",
   });
   const [editPatientName, setEditPatientName] = useState("");
 
@@ -186,6 +188,8 @@ export default function PatientList() {
           patientType: a.patientType || "outpatient",
           handoverText: a.handoverText || "",
           therapistId: a.therapistId,
+          otTime: a.otTime || "",
+          stTime: a.stTime || "",
         })
       );
       await Promise.all(promises);
@@ -216,6 +220,8 @@ export default function PatientList() {
       duration: appt.duration,
       patientType: appt.patientType || "outpatient",
       therapistId: appt.therapistId,
+      otTime: appt.otTime || "",
+      stTime: appt.stTime || "",
     });
   };
 
@@ -251,7 +257,9 @@ export default function PatientList() {
         day,
         patientType,
         handoverText: appt.handoverText || "",
-        therapistId
+        therapistId,
+        otTime: otTime.trim(),
+        stTime: stTime.trim()
       });
       alert("預約排程更新成功！");
       setEditingApptId(null);
@@ -260,7 +268,7 @@ export default function PatientList() {
       // 更新 Modal 表格狀態
       const updatedAppts = selectedPatientGroup.appointments.map(a => 
         a.id === appt.id 
-          ? { ...a, day, start, duration, patientType, therapistId, therapistName: therapists.find(t => t.id === therapistId)?.name || therapistId } 
+          ? { ...a, day, start, duration, patientType, therapistId, otTime: otTime.trim(), stTime: stTime.trim(), therapistName: therapists.find(t => t.id === therapistId)?.name || therapistId } 
           : a
       );
       
@@ -504,12 +512,14 @@ export default function PatientList() {
                 <table className="patient-table" style={{ fontSize: "12px" }}>
                   <thead>
                     <tr>
-                      <th style={{ padding: "6px 10px", width: "15%" }}>星期</th>
-                      <th style={{ padding: "6px 10px", width: "18%" }}>時間</th>
-                      <th style={{ padding: "6px 10px", width: "15%" }}>時長</th>
-                      <th style={{ padding: "6px 10px", width: "15%" }}>病患類型</th>
-                      <th style={{ padding: "6px 10px", width: "20%" }}>負責治療師</th>
-                      <th style={{ padding: "6px 10px", width: "17%" }}>操作</th>
+                      <th style={{ padding: "6px 10px", width: "10%" }}>星期</th>
+                      <th style={{ padding: "6px 10px", width: "12%" }}>時間</th>
+                      <th style={{ padding: "6px 10px", width: "12%" }}>時長</th>
+                      <th style={{ padding: "6px 10px", width: "10%" }}>病患類型</th>
+                      <th style={{ padding: "6px 10px", width: "18%" }}>職能時段</th>
+                      <th style={{ padding: "6px 10px", width: "18%" }}>語言時段</th>
+                      <th style={{ padding: "6px 10px", width: "12%" }}>負責治療師</th>
+                      <th style={{ padding: "6px 10px", width: "10%" }}>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -569,6 +579,28 @@ export default function PatientList() {
                                   <option value="inpatient">住院</option>
                                 </select>
                               </td>
+                              {/* 職能編輯 */}
+                              <td style={{ padding: "6px 8px" }}>
+                                <input 
+                                  type="text" 
+                                  value={editForm.otTime} 
+                                  onChange={e => setEditForm({ ...editForm, otTime: e.target.value })}
+                                  maxLength={20}
+                                  style={{ padding: "4px", fontSize: "12px", width: "100%" }}
+                                  placeholder="職能時段"
+                                />
+                              </td>
+                              {/* 語言編輯 */}
+                              <td style={{ padding: "6px 8px" }}>
+                                <input 
+                                  type="text" 
+                                  value={editForm.stTime} 
+                                  onChange={e => setEditForm({ ...editForm, stTime: e.target.value })}
+                                  maxLength={20}
+                                  style={{ padding: "4px", fontSize: "12px", width: "100%" }}
+                                  placeholder="語言時段"
+                                />
+                              </td>
                               {/* 負責治療師編輯 */}
                               <td style={{ padding: "6px 8px" }}>
                                 <select 
@@ -612,6 +644,8 @@ export default function PatientList() {
                                   {a.patientType === "inpatient" ? "住院" : "門診"}
                                 </span>
                               </td>
+                              <td style={{ padding: "8px 10px" }}>{a.otTime || <span style={{ color: '#cbd5e1' }}>-</span>}</td>
+                              <td style={{ padding: "8px 10px" }}>{a.stTime || <span style={{ color: '#cbd5e1' }}>-</span>}</td>
                               <td style={{ padding: "8px 10px" }}>{a.therapistName || a.therapistId}</td>
                               <td style={{ padding: "8px 10px", display: "flex", gap: "4px", justifyContent: "center" }}>
                                 <button
