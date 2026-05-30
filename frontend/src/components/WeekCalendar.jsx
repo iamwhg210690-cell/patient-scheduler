@@ -20,7 +20,6 @@ function generateSlots() {
     for (let m = 0; m < 60; m += SLOT_MIN) slots.push({ hour: h, minute: m });
   }
   slots.push({ hour: MORNING_END, minute: 0 });
-  slots.push({ hour: 12, minute: 0 });
   for (let h = AFTERNOON_START; h < AFTERNOON_END; h++) {
     for (let m = 0; m < 60; m += SLOT_MIN) slots.push({ hour: h, minute: m });
   }
@@ -72,8 +71,8 @@ export default function WeekCalendar({ therapistId, therapistName, appointments,
 
     setTooltip({
       show: true,
-      x: rect.left + window.scrollX + rect.width / 2,
-      y: rect.top + window.scrollY,
+      x: rect.left + rect.width / 2,
+      y: rect.top,
       patient: appt.patient,
       freq: freqStr,
       type: appt.patientType === 'inpatient' ? '住院' : '門診',
@@ -169,15 +168,15 @@ export default function WeekCalendar({ therapistId, therapistName, appointments,
                     <thead>
                       <tr>
                         <th rowSpan="2" style={{ width: '100px', verticalAlign: 'middle' }}>時間</th>
-                        {DAYS.map(day => (
-                          <th key={day} colSpan="3" style={{ fontSize: '15px', fontWeight: 'bold' }}>{day}</th>
+                        {group.map(t => (
+                          <th key={t.id} colSpan="5" style={{ fontSize: '15px', fontWeight: 'bold' }}>{t.name}</th>
                         ))}
                       </tr>
                       <tr>
-                        {DAYS.map((_, dayIdx) => (
-                          group.map(t => (
-                            <th key={`${dayIdx}-${t.id}`} className="wc-merged-sub-header">
-                              {t.name}
+                        {group.map(t => (
+                          DAYS.map(day => (
+                            <th key={`${t.id}-${day}`} className="wc-merged-sub-header">
+                              {day}
                             </th>
                           ))
                         ))}
@@ -189,11 +188,11 @@ export default function WeekCalendar({ therapistId, therapistName, appointments,
                         return (
                           <tr key={slotIdx}>
                             <td className="wc-time-cell-merged">{timeStr}</td>
-                            {DAYS.map((_, dayIdx) => {
-                              return group.map(t => {
+                            {group.map(t => {
+                              return [0, 1, 2, 3, 4].map(dayIdx => {
                                 const appts = getApptsInCell(t.id, dayIdx, slotIdx);
                                 return (
-                                  <td key={`${dayIdx}-${t.id}`} className="wc-cell-merged">
+                                  <td key={`${t.id}-${dayIdx}`} className="wc-cell-merged">
                                     <div className="wc-cell-inner vertical-layout">
                                       {appts.map(appt => (
                                         <div
@@ -293,7 +292,7 @@ export default function WeekCalendar({ therapistId, therapistName, appointments,
           <div 
             className="wc-custom-tooltip"
             style={{
-              position: 'absolute',
+              position: 'fixed',
               left: `${tooltip.x}px`,
               top: `${tooltip.y}px`,
               transform: 'translate(-50%, -105%)',
@@ -427,7 +426,7 @@ export default function WeekCalendar({ therapistId, therapistName, appointments,
         <div 
           className="wc-custom-tooltip"
           style={{
-            position: 'absolute',
+            position: 'fixed',
             left: `${tooltip.x}px`,
             top: `${tooltip.y}px`,
             transform: 'translate(-50%, -105%)',

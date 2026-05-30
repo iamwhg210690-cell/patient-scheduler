@@ -47,7 +47,7 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
       }
     });
 
-    return Object.values(groups).map((group) => {
+    const sortedGroups = Object.values(groups).map((group) => {
       // 排序預約時間（星期升序，時間升序）
       const sortedAppts = [...group.appointments].sort((a, b) => {
         if (a.day !== b.day) return a.day - b.day;
@@ -74,6 +74,18 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
         appointments: sortedAppts,
       };
     });
+
+    // 依預約時間排序（這週最早有預約的病人排在最前面）
+    sortedGroups.sort((a, b) => {
+      const firstA = a.appointments[0];
+      const firstB = b.appointments[0];
+      if (!firstA) return 1;
+      if (!firstB) return -1;
+      if (firstA.day !== firstB.day) return firstA.day - firstB.day;
+      return firstA.start.localeCompare(firstB.start);
+    });
+
+    return sortedGroups;
   }, [localAppts]);
 
   // 修改局部交班備註狀態 (以病人姓名為對象)
@@ -129,9 +141,9 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
     const matchesDay =
       selectedDay === "" || group.appointments.some((a) => String(a.day) === String(selectedDay));
       
-    // 病人種類篩選
+    // 病人種類篩選：只要病人的任何一筆預約符合該病患類型，即符合
     const matchesType =
-      selectedPatientType === "" || group.patientType === selectedPatientType;
+      selectedPatientType === "" || group.appointments.some((a) => a.patientType === selectedPatientType);
 
     return matchesKeyword && matchesDay && matchesType;
   });
@@ -229,7 +241,7 @@ export default function PatientHandover({ therapistId, therapistName, appointmen
                       <tr key={group.patient}>
                         <td style={{ fontWeight: "bold" }}>{group.patient}</td>
                         <td style={{ color: "#b45309", fontWeight: "600" }}>{group.frequencyStr}</td>
-                        <td style={{ fontSize: "13px" }}>{group.timeDetailsStr}</td>
+                        <td style={{ fontSize: "16px" }}>{group.timeDetailsStr}</td>
                         <td>
                           <div className="handover-input-container">
                             <div className="handover-input-wrapper">

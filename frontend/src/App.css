@@ -317,6 +317,16 @@ input:focus, select:focus, textarea:focus {
   background: #475569;
 }
 
+.header-btn-clear {
+  background: #dc2626;
+  color: white;
+  font-size: 14px;
+  padding: 6px 12px;
+}
+.header-btn-clear:hover {
+  background: #b91c1c;
+}
+
 .header-btn-add-appt {
   background: var(--primary);
   font-size: 14px; /* 由 13px 放大至 14px */
@@ -395,7 +405,7 @@ input:focus, select:focus, textarea:focus {
   background: #fdfbf7;
   padding: 14px 20px;
   font-weight: 700;
-  font-size: 14px; /* 由 13px 放大至 14px */
+  font-size: 18px;
   color: var(--text-light);
   border-bottom: 3px solid var(--border); /* 特別加粗 th 邊界 */
   text-transform: uppercase;
@@ -404,10 +414,14 @@ input:focus, select:focus, textarea:focus {
 
 .patient-table td {
   padding: 16px 20px;
-  font-size: 15px; /* 由 14px 放大至 15px */
+  font-size: 20px;
   color: var(--text);
   border-bottom: 2px solid var(--border); /* 特別加深加粗一般表格格線 */
   vertical-align: middle;
+}
+
+.patient-table td:first-child {
+  font-size: 20px;
 }
 
 .patient-table tr:last-child td {
@@ -460,7 +474,7 @@ input:focus, select:focus, textarea:focus {
   padding: 10px 12px;
   border: 2px solid var(--border); /* 加深加粗輸入框邊界 */
   border-radius: 8px;
-  font-size: 14px; /* 由 13px 放大至 14px */
+  font-size: 16px;
   transition: all 0.2s;
   background: #fffdf9;
 }

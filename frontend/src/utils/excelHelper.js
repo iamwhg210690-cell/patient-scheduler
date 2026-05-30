@@ -1,5 +1,26 @@
 import * as XLSX from 'xlsx';
 
+/**
+ * 格式化 Excel 時間。如果是小數（Excel 時間格式），轉換為 HH:MM；如果是字串，則保持原樣。
+ * @param {any} val 
+ * @returns {string}
+ */
+export function formatExcelTime(val) {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'number') {
+    let timeFraction = val;
+    if (timeFraction >= 1) {
+      timeFraction = timeFraction - Math.floor(timeFraction);
+    }
+    const totalSeconds = Math.round(timeFraction * 24 * 3600);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const pad = (num) => String(num).padStart(2, '0');
+    return `${pad(hours)}:${pad(minutes)}`;
+  }
+  return String(val).trim();
+}
+
 // 星期對照表
 const DAY_MAP_CN_TO_NUM = {
   '週一': 1, '星期一': 1, '一': 1, '1': 1,
@@ -73,7 +94,7 @@ export function parseRawRows(rawRows) {
     const therapistVal = idxTherapist !== -1 ? String(row[idxTherapist] || '').trim() : '';
     const patientVal = idxPatient !== -1 ? String(row[idxPatient] || '').trim() : '';
     const dayVal = idxDay !== -1 ? String(row[idxDay] || '').trim() : '';
-    const startVal = idxStart !== -1 ? String(row[idxStart] || '').trim() : '';
+    const startVal = idxStart !== -1 ? formatExcelTime(row[idxStart]) : '';
     const durationVal = idxDuration !== -1 ? String(row[idxDuration] || '').trim() : '';
     const typeVal = idxType !== -1 ? String(row[idxType] || '').trim() : '';
     const handoverVal = idxHandover !== -1 ? String(row[idxHandover] || '') : '';
@@ -313,4 +334,239 @@ function triggerDownload(blob, filename) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * 解析週六住院病人排程資料 (二維陣列)
+ * @param {Array} rawRows
+ * @returns {{successData: Array, errorRows: Array}}
+ */
+export function parseSaturdayRawRows(rawRows) {
+  if (rawRows.length < 2) {
+    return { successData: [], errorRows: [{ rowNum: 1, error: '資料內容為空或缺少標題列' }] };
+  }
+
+  const headers = rawRows[0].map(h => String(h || '').trim());
+  const dataRows = rawRows.slice(1);
+
+  const findHeaderIndex = (aliases) => {
+    return headers.findIndex(h => 
+      aliases.some(alias => h.toLowerCase().includes(alias.toLowerCase()))
+    );
+  };
+
+  const idxPatient = findHeaderIndex(['病人姓名', '姓名', '病人', '病患', 'patient']);
+  const idxBed = findHeaderIndex(['房號', '床號', '病房', 'bed', 'room']);
+  const idxTherapist = findHeaderIndex(['治療師', '負責治療師', 'therapist']);
+  const idxPt = findHeaderIndex(['物理治療', '物理', 'pt']);
+  const idxOt = findHeaderIndex(['職能治療', '職能', 'ot']);
+  const idxSt = findHeaderIndex(['語言治療', '語言', 'st']);
+  const idxSatTime = findHeaderIndex(['時間', '週六時間', '排程時間', 'saturdayTime', 'time']);
+  const idxWeekdayTime = findHeaderIndex(['週一-週五時間', '平日時間', '平日', 'weekdayTime', 'weekday']);
+  const idxNote = findHeaderIndex(['備註', '說明', 'note', 'handoverText']);
+
+  if (idxPatient === -1) {
+    return { 
+      successData: [], 
+      errorRows: [{ rowNum: 1, error: `找不到必要的「病人姓名」欄位。現有欄位為：${headers.join(', ')}` }] 
+    };
+  }
+
+  const successData = [];
+  const errorRows = [];
+
+  dataRows.forEach((row, index) => {
+    const rowNum = index + 2;
+    if (!row || row.filter(cell => cell !== null && cell !== undefined && String(cell).trim() !== '').length === 0) {
+      return;
+    }
+
+    const patient = idxPatient !== -1 ? String(row[idxPatient] || '').trim() : '';
+    const bed = idxBed !== -1 ? String(row[idxBed] || '').trim() : '';
+    const therapist = idxTherapist !== -1 ? String(row[idxTherapist] || '').trim() : '';
+    const ptTime = idxPt !== -1 ? formatExcelTime(row[idxPt]) : '';
+    const otTime = idxOt !== -1 ? formatExcelTime(row[idxOt]) : '';
+    const stTime = idxSt !== -1 ? formatExcelTime(row[idxSt]) : '';
+    const saturdayTime = idxSatTime !== -1 ? formatExcelTime(row[idxSatTime]) : '';
+    const weekdayTime = idxWeekdayTime !== -1 ? formatExcelTime(row[idxWeekdayTime]) : '';
+    const note = idxNote !== -1 ? String(row[idxNote] || '').trim() : '';
+
+    if (!patient) {
+      errorRows.push({ rowNum, error: '病人姓名不能為空白' });
+    } else {
+      successData.push({
+        rowNum,
+        patient,
+        bed,
+        therapist,
+        ptTime,
+        otTime,
+        stTime,
+        saturdayTime,
+        weekdayTime,
+        note
+      });
+    }
+  });
+
+  return { successData, errorRows };
+}
+
+/**
+ * 讀取並解析週六排程 Excel 檔案 (.xlsx, .xls, .csv)
+ * @param {File|Blob} file
+ * @returns {Promise<{successData: Array, errorRows: Array}>}
+ */
+export function parseSaturdayImportFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        resolve(parseSaturdayRawRows(rawRows));
+      } catch (err) {
+        reject(new Error(`解析檔案失敗：${err.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error('讀取檔案時發生錯誤'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * 解析週六排程貼上純文字
+ * @param {string} text
+ * @returns {Promise<{successData: Array, errorRows: Array}>}
+ */
+export function parseSaturdayImportText(text) {
+  return new Promise((resolve) => {
+    try {
+      const workbook = XLSX.read(text, { type: 'string' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      resolve(parseSaturdayRawRows(rawRows));
+    } catch (err) {
+      resolve({
+        successData: [],
+        errorRows: [{ rowNum: 1, error: `解析貼上內容失敗：${err.message}` }]
+      });
+    }
+  });
+}
+
+/**
+ * 讀取並解析簡易平日排程 Excel 檔案 (只比對姓名與時間)
+ * @param {File|Blob} file
+ * @returns {Promise<{successData: Array, errorRows: Array}>}
+ */
+export function parseSimpleWeekdayFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        resolve(parseSimpleWeekdayRawRows(rawRows));
+      } catch (err) {
+        reject(new Error(`解析平日對照檔案失敗：${err.message}`));
+      }
+    };
+    reader.onerror = () => reject(new Error('讀取檔案時發生錯誤'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * 解析簡易平日排程資料 (二維陣列)
+ * @param {Array} rawRows
+ * @returns {{successData: Array, errorRows: Array}}
+ */
+export function parseSimpleWeekdayRawRows(rawRows) {
+  if (rawRows.length < 2) {
+    return { successData: [], errorRows: [{ rowNum: 1, error: '資料內容為空或缺少標題列' }] };
+  }
+
+  const headers = rawRows[0].map(h => String(h || '').trim());
+  const dataRows = rawRows.slice(1);
+
+  const findHeaderIndex = (aliases) => {
+    return headers.findIndex(h => 
+      aliases.some(alias => h.toLowerCase().includes(alias.toLowerCase()))
+    );
+  };
+
+  const idxPatient = findHeaderIndex(['病人姓名', '姓名', '病人', '病患', 'patient']);
+  const idxTime = findHeaderIndex(['時間', '開始時間', '預約時間', '時段', '平日時間', 'start', 'time']);
+  const idxDay = findHeaderIndex(['預約星期', '星期', '星期幾', 'day', 'weekday']);
+
+  if (idxPatient === -1) {
+    return { 
+      successData: [], 
+      errorRows: [{ rowNum: 1, error: `找不到必要的「病人姓名」欄位。現有欄位為：${headers.join(', ')}` }] 
+    };
+  }
+
+  if (idxTime === -1) {
+    return {
+      successData: [],
+      errorRows: [{ rowNum: 1, error: `找不到必要的「時間」欄位。現有欄位為：${headers.join(', ')}` }]
+    };
+  }
+
+  const successData = [];
+  const errorRows = [];
+
+  dataRows.forEach((row, index) => {
+    const rowNum = index + 2;
+    if (!row || row.filter(cell => cell !== null && cell !== undefined && String(cell).trim() !== '').length === 0) {
+      return;
+    }
+
+    const patient = String(row[idxPatient] || '').trim();
+    const timeVal = formatExcelTime(row[idxTime]);
+    const dayVal = idxDay !== -1 ? String(row[idxDay] || '').trim() : '';
+
+    if (!patient) {
+      errorRows.push({ rowNum, error: '病人姓名不能為空白' });
+      return;
+    }
+    if (!timeVal) {
+      errorRows.push({ rowNum, error: '時間不能為空白' });
+      return;
+    }
+
+    // 嘗試解析星期。如果 timeVal 本身包含 "週一", "週二" 等，或 dayVal 有值
+    let dayNum = 0;
+    const cleanDayVal = dayVal.trim();
+    if (cleanDayVal) {
+      dayNum = DAY_MAP_CN_TO_NUM[cleanDayVal] || parseInt(cleanDayVal, 10) || 0;
+    }
+    
+    // 如果從 day 欄位沒抓到，嘗試從時間字串中抓取
+    if (dayNum === 0) {
+      const match = timeVal.match(/(週|星期)(一|二|三|四|五|六|日|1|2|3|4|5|6|7)/);
+      if (match) {
+        dayNum = DAY_MAP_CN_TO_NUM[match[0]] || DAY_MAP_CN_TO_NUM[`週${match[2]}`] || 0;
+      }
+    }
+
+    successData.push({
+      rowNum,
+      patient,
+      start: timeVal,
+      day: dayNum,
+      duration: 30,
+      patientType: 'outpatient'
+    });
+  });
+
+  return { successData, errorRows };
 }

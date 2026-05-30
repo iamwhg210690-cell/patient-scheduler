@@ -1,4 +1,6 @@
 // frontend/src/api.js
+import { auth } from './firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 // 初始化 localStorage 中的預設資料
 function getStorage(key, defaultVal = []) {
@@ -19,7 +21,7 @@ function setStorage(key, val) {
 }
 
 // 模擬 API 延遲 (毫秒)
-const delay = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms = 10) => new Promise(resolve => setTimeout(resolve, ms));
 
 const api = {
   defaults: {
@@ -74,14 +76,35 @@ const api = {
   async post(url, body) {
     await delay();
     
+    if (url === '/api/clear-data') {
+      localStorage.setItem('appointments', '[]');
+      localStorage.setItem('therapists', '[]');
+      localStorage.setItem('ps_saturday_patients', '[]');
+      localStorage.setItem('ps_saturday_weekday_appts', '[]');
+      return { data: { message: '所有資料已清空' } };
+    }
+    
     if (url === '/api/auth/login') {
       const { username, password } = body || {};
-      if (username === 'admin' && password === 'password') {
-        return { data: { token: 'dev-token-123' } };
+      const email = username.includes('@') ? username : `${username}@example.com`;
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const token = await userCredential.user.getIdToken();
+        return { data: { token } };
+      } catch (e) {
+        // 本機 file:// 環境或特定的不支援環境下，自動降級為本地帳密比對 (admin / password)
+        const isFileProtocol = typeof window !== 'undefined' && window.location && window.location.protocol === 'file:';
+        const isUnsupportedEnv = e.code === 'auth/operation-not-supported-in-this-environment' || e.message?.includes('not supported');
+        
+        if ((isFileProtocol || isUnsupportedEnv) && username === 'admin' && password === 'password') {
+          console.warn('Firebase Auth 在此環境下不支援，自動降級為本地 admin/password 驗證登入。');
+          return { data: { token: 'dev-token-local-fallback' } };
+        }
+        
+        const err = new Error('帳號或密碼錯誤');
+        err.response = { status: 401, data: { error: `${e.message} (${e.code || 'unknown'})` } };
+        throw err;
       }
-      const err = new Error('帳號或密碼錯誤');
-      err.response = { status: 401, data: { error: 'Invalid credentials' } };
-      throw err;
     }
     
     if (url === '/api/therapists') {
@@ -248,7 +271,7 @@ const api = {
 };
 
 export function setAuthToken(token) {
-  // 離線版 Mock 方法，不需實際寫入 network header 狀態
+  // Firebase Auth 中由 SDK 自動處理 Token 儲存與攜帶，此處為保持 API 相容性做 Mock
 }
 
 export default api;

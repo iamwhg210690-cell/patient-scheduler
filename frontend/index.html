@@ -5,6 +5,44 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>物理治療排程系統</title>
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        var div = document.createElement('div');
+        div.style.position = 'fixed';
+        div.style.inset = '0';
+        div.style.background = '#fef2f2';
+        div.style.color = '#991b1b';
+        div.style.padding = '30px';
+        div.style.fontFamily = 'monospace';
+        div.style.zIndex = '999999';
+        div.style.overflow = 'auto';
+        div.style.fontSize = '14px';
+        div.style.lineHeight = '1.5';
+        div.innerHTML = '<h1 style="font-size:22px;margin-bottom:15px;color:#b91c1c;">🚨 系統執行期崩潰 (Runtime Error)</h1>' +
+          '<p><b>錯誤訊息 (Message)：</b>' + message + '</p>' +
+          '<p><b>檔案來源 (Source)：</b>' + source + ' (第 ' + lineno + ' 行，第 ' + colno + ' 列)</p>' +
+          '<p><b>堆疊軌跡 (Stack)：</b><pre style="background:#fee2e2;padding:15px;border-radius:6px;overflow-x:auto;margin-top:10px;">' + (error ? error.stack : '') + '</pre></p>';
+        document.body.appendChild(div);
+        return false;
+      };
+      window.onunhandledrejection = function(event) {
+        var div = document.createElement('div');
+        div.style.position = 'fixed';
+        div.style.inset = '0';
+        div.style.background = '#fffbeb';
+        div.style.color = '#92400e';
+        div.style.padding = '30px';
+        div.style.fontFamily = 'monospace';
+        div.style.zIndex = '999999';
+        div.style.overflow = 'auto';
+        div.style.fontSize = '14px';
+        div.style.lineHeight = '1.5';
+        div.innerHTML = '<h1 style="font-size:22px;margin-bottom:15px;color:#d97706;">⚠️ 未處理的非同步錯誤 (Unhandled Rejection)</h1>' +
+          '<p><b>原因 (Reason)：</b>' + event.reason + '</p>' +
+          '<p><b>堆疊軌跡 (Stack)：</b><pre style="background:#fef3c7;padding:15px;border-radius:6px;overflow-x:auto;margin-top:10px;">' + (event.reason && event.reason.stack ? event.reason.stack : '') + '</pre></p>';
+        document.body.appendChild(div);
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -373,6 +373,7 @@
 
 /* 合併週排程表 */
 .wc-merged-table {
+  min-width: 1600px; /* 放寬表格以顯示病人全名 */
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;

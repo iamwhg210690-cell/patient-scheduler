@@ -3,7 +3,7 @@ import api from "../api";
 
 const TIME_SLOTS = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', 
-  '12:00', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'
+  '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00'
 ];
 
 const SLOT_MIN = 30;
@@ -24,7 +24,6 @@ function generateSlots() {
     for (let m = 0; m < 60; m += SLOT_MIN) slots.push({ hour: h, minute: m });
   }
   slots.push({ hour: MORNING_END, minute: 0 });
-  slots.push({ hour: 12, minute: 0 });
   for (let h = AFTERNOON_START; h < AFTERNOON_END; h++) {
     for (let m = 0; m < 60; m += SLOT_MIN) slots.push({ hour: h, minute: m });
   }
@@ -34,10 +33,10 @@ function generateSlots() {
 
 const SLOTS = generateSlots();
 
-export default function PatientList() {
-  const [appointments, setAppointments] = useState([]);
+export default function PatientList({ appointments: propAppointments, therapists: propTherapists, onUpdate }) {
+  const appointments = propAppointments || [];
+  const therapists = propTherapists || [];
   const [loading, setLoading] = useState(false);
-  const [therapists, setTherapists] = useState([]);
 
   // 搜尋過濾條件
   const [search, setSearch] = useState("");
@@ -64,25 +63,12 @@ export default function PatientList() {
 
   const dayLabels = { 1: "週一", 2: "週二", 3: "週三", 4: "週四", 5: "週五" };
 
+  // 呼叫父元件的 onUpdate callback，以通知 App.jsx 重新加載最新預約與排程資料
   const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [apptRes, therapistRes] = await Promise.all([
-        api.get("/api/appointments"),
-        api.get("/api/therapists"),
-      ]);
-      setAppointments(apptRes.data || []);
-      setTherapists(therapistRes.data || []);
-    } catch (err) {
-      console.error("Failed to fetch data for patient list", err);
-    } finally {
-      setLoading(false);
+    if (onUpdate) {
+      await onUpdate();
     }
-  }, []);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  }, [onUpdate]);
 
   // 核心邏輯：將預約資料依「病患姓名」進行分群 (Group By)
   const patientGroups = useMemo(() => {
@@ -227,7 +213,7 @@ export default function PatientList() {
 
   // 3. 儲存單筆編輯（含衝突檢測）
   const handleSaveApptEdit = async (appt) => {
-    const { day, start, duration, patientType, therapistId } = editForm;
+    const { day, start, duration, patientType, therapistId, otTime, stTime } = editForm;
 
     // 衝突判定
     const startIdx = SLOTS.findIndex(s => formatTime(s.hour, s.minute) === start);
@@ -236,15 +222,50 @@ export default function PatientList() {
       return;
     }
 
-    // 算出在此開始時間 slot 內已有的人數 (排除目前正在編輯的這一筆 appt.id)
-    const currentOccupancy = appointments.filter(a => {
-      if (a.id === appt.id) return false; // 排除自己
-      return a.day === day && a.therapistId === therapistId && a.start === start;
-    }).length;
+    const timeToMinutes = (tStr) => {
+      const [h, m] = tStr.split(':').map(Number);
+      return h * 60 + m;
+    };
 
-    if (currentOccupancy >= 2) {
+    const newStartMin = timeToMinutes(start);
+    const newEndMin = newStartMin + Number(duration);
+
+    // 找出所有被新預約覆蓋的 30 分鐘時間格
+    const coveredSlots = SLOTS.filter(slot => {
+      const slotStart = slot.hour * 60 + slot.minute;
+      const slotEnd = slotStart + 30;
+      return newStartMin < slotEnd && slotStart < newEndMin;
+    });
+
+    let collisionDetected = false;
+    let collisionTimeStr = "";
+
+    // 檢查每一個被覆蓋的時間格
+    for (const slot of coveredSlots) {
+      const slotStart = slot.hour * 60 + slot.minute;
+      const slotEnd = slotStart + 30;
+
+      // 計算在此時間格內已有的人數 (排除目前正在編輯的這一筆 appt.id)
+      const occupancy = appointments.filter(a => {
+        if (a.id === appt.id) return false; // 排除自己
+        if (a.day !== day || a.therapistId !== therapistId) return false;
+        
+        const aStart = timeToMinutes(a.start);
+        const aEnd = aStart + Number(a.duration);
+        return aStart < slotEnd && slotStart < aEnd;
+      }).length;
+
+      if (occupancy >= 2) {
+        collisionDetected = true;
+        const pad = (num) => String(num).padStart(2, '0');
+        collisionTimeStr = `${pad(slot.hour)}:${pad(slot.minute)}`;
+        break;
+      }
+    }
+
+    if (collisionDetected) {
       const tName = therapists.find(t => t.id === therapistId)?.name || therapistId;
-      alert(`⚠️ 預約衝突！\n治療師「${tName}」在 ${dayLabels[day]} ${start} 的預約人數已達上限（${currentOccupancy}/2），無法儲存此變更。`);
+      alert(`⚠️ 預約衝突！\n治療師「${tName}」在 ${dayLabels[day]} ${collisionTimeStr} 的預約人數已達上限，無法儲存此變更。`);
       return; // 阻擋儲存
     }
 
